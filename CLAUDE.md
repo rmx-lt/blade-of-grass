@@ -23,4 +23,5 @@ Issue types: Task, Bug, Feature, and Epic for parent issues that group sub-issue
 
 - Never commit or write to the wiki: passwords, tokens, private keys, IMEI/ICCID/IMSI, home IPs, personal emails or names. The wiki is public.
 - Server changes get a dated entry on the wiki page `Server-Changelog` (what, why, backup, undo).
-- Merging to `main` in rmx-backend-probe deploys to the VPS.
+- Branches in every rmx-lt repo: `feat/<issue#>-slug` → PR → `development` (default) → PR → `production`. Feature branches are deleted on merge; there is no `main`.
+- Merging to `production` deploys: rmx-vps (playbook) and rmx-backend-probe (probe image) go to the VPS. Merging to `development` deploys nothing.
