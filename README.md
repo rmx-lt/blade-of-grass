@@ -12,8 +12,8 @@ This is the **meta repository**. The project lives on GitHub:
 | Part | Repo | What it is |
 |---|---|---|
 | **rmx-server** | [rmx-vps](https://github.com/rmx-lt/rmx-vps) | Server infrastructure: hardened Ubuntu VPS, Docker Compose, Caddy, Mosquitto |
-| | [rmx-backend-probe](https://github.com/rmx-lt/rmx-backend-probe) | Learning / diagnostic Rust service that rehearses the backend stack end to end |
-| | [rmx-backend](https://github.com/rmx-lt/rmx-backend) | Production Rust backend: telemetry, TimescaleDB, REST/WebSocket API |
+| | [rmx-backend-probe](https://github.com/rmx-lt/rmx-backend-probe) | Learning / diagnostic Go service that rehearses the backend stack end to end |
+| | [rmx-backend](https://github.com/rmx-lt/rmx-backend) | Production Go backend: telemetry, TimescaleDB, REST/WebSocket API |
 | **rmx-mower** | [rmx-mower](https://github.com/rmx-lt/rmx-mower) | Mower firmware |
 | | [rmx-mower-modem-probe](https://github.com/rmx-lt/rmx-mower-modem-probe) | Learning / diagnostic firmware for the mower's LTE link |
 | **rmx-client** | [rmx-client](https://github.com/rmx-lt/rmx-client) | Client app to monitor and control the mower |
