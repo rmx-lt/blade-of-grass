@@ -3,6 +3,7 @@
 /rmx-server/
 /rmx-mower/
 /rmx-client/
+/blade-of-grass.wiki/
 
 # Never commit keys or secrets
 *_ed25519

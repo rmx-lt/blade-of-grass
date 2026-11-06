@@ -20,11 +20,11 @@ This is the **meta repository**. The project lives on GitHub:
 
 ## Local layout
 
-The component repos are cloned inside this one (`.gitignore` excludes their folders); the wiki is cloned next to it:
+The component repos and the wiki are cloned inside this one (`.gitignore` excludes their folders):
 
 ```
-blade-of-grass.wiki/       ← the wiki (git clone https://github.com/rmx-lt/blade-of-grass.wiki.git)
 blade-of-grass/            ← this repo
+├── blade-of-grass.wiki/   ← the wiki (git clone https://github.com/rmx-lt/blade-of-grass.wiki.git)
 ├── rmx-server/
 │   ├── rmx-vps/
 │   ├── rmx-backend-probe/

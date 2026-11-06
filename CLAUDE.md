@@ -5,7 +5,7 @@ Applies to this repo and every component repo cloned inside it (`rmx-server/*`, 
 ## Where things live
 
 - **Code:** the repos of the GitHub organization `rmx-lt` (all public).
-- **Knowledge:** the wiki of this repo, https://github.com/rmx-lt/blade-of-grass/wiki. Local clone `C:\Projects\blade-of-grass.wiki` (`git pull` before reading, commit and push after editing). Pages: `Home`, `Server*`, `Backend-Probe`, `Modem-*`; the sidebar lists them all. Code comments cite pages as "wiki Server §N".
+- **Knowledge:** the wiki of this repo, https://github.com/rmx-lt/blade-of-grass/wiki. Local clone `C:\Projects\blade-of-grass\blade-of-grass.wiki` (`git pull` before reading, commit and push after editing). Pages: `Home`, `Server*`, `Backend-Probe`, `Modem-*`; the sidebar lists them all. Code comments cite pages as "wiki Server §N".
 - **ESP hardware facts** reusable beyond this project (boards, chips, ESP-IDF, lessons): the private hub `C:\Repos\esp-knowledge` (`jRmx0/esp-knowledge`), read its `INDEX.md` before firmware or board work. Mower-specific hardware decisions: wiki `Mower-Hardware`.
 - **Work:** issues in the matching repo, on the org project **Blade of Grass** (`gh project … 1 --owner rmx-lt`, https://github.com/orgs/rmx-lt/projects/1). Use the `planning-work-in-github-issues` skill.
 
