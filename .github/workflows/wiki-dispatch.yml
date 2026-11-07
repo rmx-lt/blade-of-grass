@@ -1,0 +1,28 @@
+# Reusable: asks blade-of-grass to republish the wiki (repository_dispatch
+# event wiki-publish). Needs the org secret WIKI_DISPATCH_TOKEN (fine-grained
+# PAT, Contents: read and write on blade-of-grass). Without it the job only
+# logs a notice and succeeds.
+# Spec: https://github.com/rmx-lt/blade-of-grass/issues/30
+name: wiki-dispatch
+
+on:
+  workflow_call:
+    secrets:
+      WIKI_DISPATCH_TOKEN:
+        required: false
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Dispatch wiki-publish
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::WIKI_DISPATCH_TOKEN not set; the wiki updates on the next scheduled publish"
+            exit 0
+          fi
+          gh api repos/rmx-lt/blade-of-grass/dispatches -f event_type=wiki-publish
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_DISPATCH_TOKEN }}
