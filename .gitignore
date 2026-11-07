@@ -2,7 +2,6 @@
 # This meta repo only links to them.
 /rmx-server/
 /rmx-mower/
-/blade-of-grass.wiki/
 
 # Never commit keys or secrets
 *_ed25519
