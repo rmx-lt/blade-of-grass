@@ -1,6 +1,6 @@
 # Blade of Grass — notes for agents
 
-Applies to this repo and every component repo cloned inside it (`rmx-server/*`, `rmx-mower/*`, `rmx-client`). Component repos may add their own `CLAUDE.md`.
+Applies to this repo and every component repo cloned inside it (`rmx-server/*`, `rmx-mower/*`). Component repos may add their own `CLAUDE.md`.
 
 ## Where things live
 
@@ -24,4 +24,4 @@ Issue types: Task, Bug, Feature, and Epic for parent issues that group sub-issue
 - Never commit or write to the wiki: passwords, tokens, private keys, IMEI/ICCID/IMSI, home IPs, personal emails or names. The wiki is public.
 - Server changes get a dated entry on the wiki page `Server-Changelog` (what, why, backup, undo).
 - Branches in every rmx-lt repo: `feat/<issue#>-slug` → PR → `development` (default) → PR → `production`. Feature branches are deleted on merge; there is no `main`.
-- Merging to `production` deploys: rmx-vps (playbook) and rmx-backend-probe (probe image) go to the VPS. Merging to `development` deploys nothing.
+- Merging to `production` deploys: rmx-server-infra (playbook) and rmx-server-app-probe (probe image) go to the VPS. Merging to `development` deploys nothing.
