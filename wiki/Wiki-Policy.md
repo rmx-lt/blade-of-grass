@@ -52,7 +52,7 @@ A PR changes `wiki/` when it changes something a page describes:
 
 Otherwise the PR body says `Wiki: none: <reason>`. Allowed reasons: refactor, tests, undocumented CI internals, dependency bump without behaviour change, typo.
 
-The `wiki-check` workflow enforces this on PRs into `development`. A PR that changes files outside `wiki/` and none inside needs the `Wiki: none:` line with a non-empty reason. PRs from `development` into `production` are not checked: their changes were checked on the way into `development`.
+The `wiki-check` workflow enforces this on PRs into `development`. A PR that changes files outside `wiki/` and none inside needs the `Wiki: none:` line with a non-empty reason. PRs from `development` into `production` are not checked: their changes were checked on the way into `development`. `wiki-check / check` is a required status check on `development` in every rmx-lt repo.
 
 ## 5. Cross-repo dependencies
 

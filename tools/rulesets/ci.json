@@ -1,0 +1,57 @@
+{
+  "rmx-server-infra": [
+    {
+      "name": "rmx: CI",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {
+        "ref_name": {
+          "include": ["refs/heads/development", "refs/heads/production"],
+          "exclude": []
+        }
+      },
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "strict_required_status_checks_policy": false,
+            "required_status_checks": [
+              {"context": "check", "integration_id": 15368},
+              {"context": "db-roundtrip", "integration_id": 15368},
+              {"context": "container", "integration_id": 15368}
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "rmx-server-app-probe": [
+    {
+      "name": "rmx: CI",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {
+        "ref_name": {
+          "include": ["refs/heads/development", "refs/heads/production"],
+          "exclude": []
+        }
+      },
+      "bypass_actors": [],
+      "rules": [
+        {
+          "type": "required_status_checks",
+          "parameters": {
+            "strict_required_status_checks_policy": false,
+            "required_status_checks": [
+              {"context": "Go (fmt, vet, staticcheck, unit tests)", "integration_id": 15368},
+              {"context": "Client (eslint, tsc, bun test, build)", "integration_id": 15368},
+              {"context": "Integration tests (TimescaleDB + Mosquitto)", "integration_id": 15368},
+              {"context": "Docker image", "integration_id": 15368}
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

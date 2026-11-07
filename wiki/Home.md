@@ -71,6 +71,10 @@ blade-of-grass/            ← meta repo
 
 Pages live in each repo's `wiki/` folder and change by pull request. The rules are in [Wiki-Policy](Wiki-Policy).
 
+## Repo settings
+
+Branch rulesets and `has_wiki` of every rmx-lt repo come from `tools/rulesets/` in blade-of-grass. Change the definitions there, run `python tools/rulesets/apply.py` (dry run), then `python tools/rulesets/apply.py --apply`. They are applied per repo because organization rulesets need GitHub Team.
+
 ## License
 
 Code and documentation are licensed under [Apache-2.0](https://github.com/rmx-lt/blade-of-grass/blob/development/LICENSE).
