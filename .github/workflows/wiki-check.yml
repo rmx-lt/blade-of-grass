@@ -24,11 +24,11 @@ jobs:
           # to it is tested by its own PR; everywhere else, from development.
           ref: ${{ github.repository == 'rmx-lt/blade-of-grass' && github.sha || 'development' }}
           path: .bog
+          persist-credentials: false
 
       - name: Check the PR body
         run: python .bog/tools/wiki/check_pr.py --repo "$REPO" --pr "$PR"
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
