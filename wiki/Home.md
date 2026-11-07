@@ -53,7 +53,7 @@ flowchart LR
 
 ## Local layout
 
-The component repos and this wiki are cloned inside the blade-of-grass repo folder (its `.gitignore` excludes them):
+The component repos are cloned inside the blade-of-grass repo folder (its `.gitignore` excludes them):
 
 ```
 blade-of-grass/            ← meta repo
