@@ -1,0 +1,37 @@
+# Weekly drift scan: callers, rulesets, has_wiki, LICENSE, README, and direct
+# edits on the GitHub wiki (tools/drift/scan.py). Opens or updates one issue.
+# Needs the org secret DRIFT_SCAN_TOKEN, a fine-grained PAT on rmx-lt (all
+# repositories) with Administration read, Contents read, Issues read and write,
+# and Metadata read. GITHUB_TOKEN cannot read rulesets in the other repos.
+# A PAT-created issue still triggers rmx.yml, which adds it to the project.
+# Spec: https://github.com/rmx-lt/blade-of-grass/issues/32
+name: drift-scan
+
+on:
+  schedule:
+    # Monday, after the weekly wiki-publish at 03:17 UTC.
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tools/drift -v
+
+      - name: Scan
+        env:
+          GH_TOKEN: ${{ secrets.DRIFT_SCAN_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "::error::Org secret DRIFT_SCAN_TOKEN is not set. It needs Administration read, Contents read and Issues write on the rmx-lt repos."
+            exit 1
+          fi
+          python3 tools/drift/scan.py --update-issue

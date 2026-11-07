@@ -21,7 +21,7 @@ Pages describe how things are now. History lives in git, PRs and issues. There a
 
 Every repo keeps its pages in its own `wiki/` folder. They change only by PR.
 
-The GitHub wiki is a generated mirror, built from the `development` branch of every repo. Direct edits there are overwritten on the next publish and reported.
+The GitHub wiki is a generated mirror, built from the `development` branch of every repo. Direct edits there are overwritten on the next publish and reported by the weekly drift scan.
 
 A page that differs between `development` and `production` gets a banner "Not yet in production" with a link to the diff. It means the described change is merged but not deployed.
 
