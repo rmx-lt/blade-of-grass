@@ -65,5 +65,97 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(len(cm.exception.problems), 2)
 
 
+def banner(repo: str) -> str:
+    return (
+        "> **Not yet in production.** This page has changes merged into ``development`` "
+        "that are not deployed yet: "
+        f"[diff](https://github.com/rmx-lt/{repo}/compare/production...development).\n\n"
+    )
+
+
+FOOTER = (
+    "Generated from the ``wiki/`` folders of the rmx-lt repos. Do not edit here: "
+    "changes go through PRs, see [Wiki-Policy](Wiki-Policy).\n"
+)
+
+
+def P_(name, repo, dev, prod):
+    return build.Page(name=name, repo=repo, dev_text=dev, prod_text=prod)
+
+
+class RenderTest(unittest.TestCase):
+    def test_banner_only_when_dev_differs(self):
+        pages = {
+            "Same": P_("Same", HOME, "x\n", "x\n"),
+            "Diff": P_("Diff", HOME, "new\n", "old\n"),
+            "Fresh": P_("Fresh", "rmx-server-app", "new\n", None),
+            "_Sidebar": P_("_Sidebar", HOME, "new\n", "old\n"),
+            "Eol": P_("Eol", HOME, "a\n", "a\r\n"),
+        }
+        pages["Fresh"].name = "Server-App-Fresh"
+        pages["Server-App-Fresh"] = pages.pop("Fresh")
+        files, _ = build.render(pages, CONFIG)
+        self.assertEqual(files["Same.md"], "x\n")
+        self.assertEqual(files["Diff.md"], banner(HOME) + "new\n")
+        self.assertEqual(files["Server-App-Fresh.md"], banner("rmx-server-app") + "new\n")
+        self.assertEqual(files["_Sidebar.md"], "new\n")
+        self.assertEqual(files["Eol.md"], "a\n")
+
+    def test_stubs(self):
+        pages = {"Server-Infra": P_("Server-Infra", "rmx-server-infra", "x\n", "x\n")}
+        files, warnings = build.render(pages, CONFIG)
+        self.assertEqual(files["Server.md"], "This page moved to [Server-Infra](Server-Infra).\n")
+        self.assertEqual(len(CONFIG["stubs"]), 13)
+        for old in CONFIG["stubs"]:
+            self.assertIn(old + ".md", files)
+        self.assertEqual(len(warnings), 12)
+        self.assertTrue(any("Server-Infra-Ansible" in w for w in warnings))
+        self.assertFalse(any("'Server-Infra'" in w or w.endswith(" Server-Infra") for w in warnings))
+
+    def test_stub_collision(self):
+        pages = {"Server": P_("Server", HOME, "x\n", "x\n")}
+        with self.assertRaises(build.BuildError) as cm:
+            build.render(pages, CONFIG)
+        self.assertIn("Server", "\n".join(cm.exception.problems))
+
+    def test_footer(self):
+        files, _ = build.render({}, CONFIG)
+        self.assertEqual(files["_Footer.md"], FOOTER)
+        with self.assertRaises(build.BuildError):
+            build.render({"_Footer": P_("_Footer", HOME, "x\n", "x\n")}, CONFIG)
+
+
+class MainTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.src = self.root / "src"
+        self.out = self.root / "out"
+        self.cfg = Path(__file__).resolve().parent / "config.json"
+
+    def run_main(self):
+        return build.main(["--src", str(self.src), "--out", str(self.out), "--config", str(self.cfg)])
+
+    def test_main_writes_out_and_exit_codes(self):
+        write(self.src, HOME, "development", "Home.md", "h\n")
+        write(self.src, HOME, "production", "Home.md", "h\n")
+        self.out.mkdir()
+        (self.out / "stale.md").write_text("old", encoding="utf-8")
+        self.assertEqual(self.run_main(), 0)
+        expected = {"Home.md", "_Footer.md"} | {s + ".md" for s in CONFIG["stubs"]}
+        self.assertEqual({p.name for p in self.out.iterdir()}, expected)
+        self.assertEqual((self.out / "Home.md").read_bytes(), b"h\n")
+        # invalid tree: out untouched
+        write(self.src, HOME, "development", "img.png", "x")
+        self.assertEqual(self.run_main(), 1)
+        self.assertEqual({p.name for p in self.out.iterdir()}, expected)
+
+    def test_main_creates_out(self):
+        self.src.mkdir()
+        self.assertEqual(self.run_main(), 0)
+        self.assertTrue((self.out / "_Footer.md").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

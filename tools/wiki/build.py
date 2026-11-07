@@ -4,7 +4,10 @@ Pure functions over a source tree SRC/<repo>/<branch>/wiki/*.md; no network.
 """
 from __future__ import annotations
 
+import argparse
 import json
+import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -74,3 +77,70 @@ def collect(src: Path, config: dict) -> dict[str, Page]:
     if problems:
         raise BuildError(problems)
     return pages
+
+
+def _banner(repo: str) -> str:
+    return (
+        "> **Not yet in production.** This page has changes merged into ``development`` "
+        "that are not deployed yet: "
+        f"[diff](https://github.com/rmx-lt/{repo}/compare/production...development).\n\n"
+    )
+
+
+FOOTER = (
+    "Generated from the ``wiki/`` folders of the rmx-lt repos. Do not edit here: "
+    "changes go through PRs, see [Wiki-Policy](Wiki-Policy).\n"
+)
+
+
+def render(pages: dict[str, Page], config: dict) -> tuple[dict[str, str], list[str]]:
+    problems: list[str] = []
+    warnings: list[str] = []
+    files: dict[str, str] = {}
+    if "_Footer" in pages:
+        problems.append("page _Footer clashes with the generated footer")
+    for old in config["stubs"]:
+        if old in pages:
+            problems.append(f"stub {old} collides with the page {old}")
+    if problems:
+        raise BuildError(problems)
+    for name, page in pages.items():
+        text = page.dev_text.replace("\r\n", "\n")
+        prod = None if page.prod_text is None else page.prod_text.replace("\r\n", "\n")
+        if not name.startswith("_") and prod != text:
+            text = _banner(page.repo) + text
+        files[f"{name}.md"] = text
+    for old, new in config["stubs"].items():
+        if new not in pages:
+            warnings.append(f"stub {old}: target page does not exist yet: {new}")
+        files[f"{old}.md"] = f"This page moved to [{new}]({new}).\n"
+    files["_Footer.md"] = FOOTER
+    return files, warnings
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--src", required=True, type=Path)
+    ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--config", type=Path, default=Path(__file__).resolve().parent / "config.json")
+    args = ap.parse_args(argv)
+    try:
+        config = load_config(args.config)
+        files, warnings = render(collect(args.src, config), config)
+    except BuildError as e:
+        for problem in e.problems:
+            print(f"error: {problem}", file=sys.stderr)
+        return 1
+    for w in warnings:
+        print(f"warning: {w}", file=sys.stderr)
+    if args.out.exists():
+        shutil.rmtree(args.out)
+    args.out.mkdir(parents=True)
+    for fname, content in files.items():
+        with open(args.out / fname, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
