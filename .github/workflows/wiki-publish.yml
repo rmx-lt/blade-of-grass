@@ -1,0 +1,87 @@
+# Builds the GitHub wiki from the wiki/ folders of the rmx-lt repos
+# (tools/wiki/build.py, config in tools/wiki/config.json) and, once the repo
+# variable WIKI_PUBLISH_LIVE is 'true', pushes the result to the wiki.
+# Until then it is a dry run: the built wiki is only uploaded as an artifact.
+# Spec: https://github.com/rmx-lt/blade-of-grass/issues/26
+name: wiki-publish
+
+on:
+  pull_request:
+    paths:
+      - 'wiki/**'
+      - 'tools/wiki/**'
+      - '.github/workflows/wiki-publish.yml'
+  push:
+    branches: [development, production]
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [wiki-publish]
+
+concurrency:
+  group: wiki-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # only the live push needs it
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tools/wiki -v
+
+      - name: Clone sources
+        run: |
+          set -euo pipefail
+          repos=$(python3 - <<'PY'
+          import json
+          c = json.load(open("tools/wiki/config.json"))
+          print("\n".join([c["home_repo"], *c["prefixes"]]))
+          PY
+          )
+          org=$(python3 -c 'import json; print(json.load(open("tools/wiki/config.json"))["org"])')
+          echo "$repos" > repos.txt
+          for repo in $repos; do
+            for branch in development production; do
+              git clone --depth 1 --branch "$branch" \
+                "https://github.com/$org/$repo.git" "SRC/$repo/$branch"
+            done
+          done
+
+      - name: Build wiki
+        run: python3 tools/wiki/build.py --src SRC --out OUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wiki
+          path: OUT
+          retention-days: 7
+
+      - name: Publish to the wiki
+        if: github.event_name != 'pull_request' && vars.WIKI_PUBLISH_LIVE == 'true'
+        env:
+          WIKI_URL: https://x-access-token:${{ github.token }}@github.com/rmx-lt/blade-of-grass.wiki.git
+        run: |
+          set -euo pipefail
+          git clone "$WIKI_URL" WIKI
+          cd WIKI
+          # Replace every file: direct wiki edits are overwritten, history is kept.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a ../OUT/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+          shas=""
+          while read -r repo; do
+            shas="$shas $repo@$(git -C "../SRC/$repo/development" rev-parse --short HEAD)"
+          done < ../repos.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Publish wiki from${shas}"
+          git push
