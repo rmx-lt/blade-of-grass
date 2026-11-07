@@ -1,0 +1,27 @@
+{
+  "org": "rmx-lt",
+  "home_repo": "blade-of-grass",
+  "prefixes": {
+    "rmx-server-infra": "Server-Infra",
+    "rmx-server-app": "Server-App",
+    "rmx-server-app-probe": "Server-App-Probe",
+    "rmx-mower-autopilot": "Mower-Autopilot",
+    "rmx-mower-gateway": "Mower-Gateway",
+    "rmx-mower-gateway-probe": "Mower-Gateway-Probe"
+  },
+  "stubs": {
+    "Server": "Server-Infra",
+    "Server-Ansible": "Server-Infra-Ansible",
+    "Backend-Probe": "Server-App-Probe",
+    "Modem-Probe": "Mower-Gateway-Probe",
+    "Modem-Knowledge": "Mower-Gateway-Probe-Knowledge",
+    "Modem-Board-Hardware": "Mower-Gateway-Probe-Board-Hardware",
+    "Modem-SIM7600": "Mower-Gateway-Probe-SIM7600",
+    "Modem-ESP-IDF-Environment": "Mower-Gateway-Probe-ESP-IDF-Environment",
+    "Modem-PPP": "Mower-Gateway-Probe-PPP",
+    "Modem-Server-Contract": "Mower-Gateway-Probe-Server-Contract",
+    "Modem-Plan": "Mower-Gateway-Probe-Plan",
+    "Modem-Tools": "Mower-Gateway-Probe-Tools",
+    "Modem-Sources": "Mower-Gateway-Probe-Sources"
+  }
+}
