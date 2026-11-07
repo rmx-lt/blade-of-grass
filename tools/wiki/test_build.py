@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -64,17 +65,46 @@ class CollectTest(unittest.TestCase):
             build.collect(self.src, CONFIG)
         self.assertEqual(len(cm.exception.problems), 2)
 
+    def test_symlink_rejected(self):
+        write(self.src, HOME, "development", "Real.md", "x\n")
+        wiki = self.src / HOME / "development" / "wiki"
+        try:
+            os.symlink(wiki / "Real.md", wiki / "Link.md")
+            os.symlink(wiki, wiki / "LinkDir", target_is_directory=True)
+        except (OSError, NotImplementedError, AttributeError):
+            self.skipTest("symlinks not available")
+        with self.assertRaises(build.BuildError) as cm:
+            build.collect(self.src, CONFIG)
+        joined = "\n".join(cm.exception.problems)
+        self.assertIn("Link.md", joined)
+        self.assertIn("LinkDir", joined)
+        self.assertIn("symlink", joined)
+
+    def test_invalid_utf8_is_a_problem(self):
+        d = self.src / HOME / "development" / "wiki"
+        d.mkdir(parents=True)
+        (d / "Bad.md").write_bytes(b"\xff\xfe\x00bad")
+        with self.assertRaises(build.BuildError) as cm:
+            build.collect(self.src, CONFIG)
+        self.assertIn("Bad.md", "\n".join(cm.exception.problems))
+
+    def test_bom_dropped(self):
+        d = self.src / HOME / "development" / "wiki"
+        d.mkdir(parents=True)
+        (d / "Home.md").write_bytes(b"\xef\xbb\xbf# Home\n")
+        self.assertEqual(build.collect(self.src, CONFIG)["Home"].dev_text, "# Home\n")
+
 
 def banner(repo: str) -> str:
     return (
-        "> **Not yet in production.** This page has changes merged into ``development`` "
+        "> **Not yet in production.** This page has changes merged into `development` "
         "that are not deployed yet: "
         f"[diff](https://github.com/rmx-lt/{repo}/compare/production...development).\n\n"
     )
 
 
 FOOTER = (
-    "Generated from the ``wiki/`` folders of the rmx-lt repos. Do not edit here: "
+    "Generated from the `wiki/` folders of the rmx-lt repos. Do not edit here: "
     "changes go through PRs, see [Wiki-Policy](Wiki-Policy).\n"
 )
 
@@ -110,7 +140,7 @@ class RenderTest(unittest.TestCase):
             self.assertIn(old + ".md", files)
         self.assertEqual(len(warnings), 12)
         self.assertTrue(any("Server-Infra-Ansible" in w for w in warnings))
-        self.assertFalse(any("'Server-Infra'" in w or w.endswith(" Server-Infra") for w in warnings))
+        self.assertFalse(any(w.endswith(": Server-Infra") for w in warnings))
 
     def test_stub_collision(self):
         pages = {"Server": P_("Server", HOME, "x\n", "x\n")}
@@ -155,6 +185,25 @@ class MainTest(unittest.TestCase):
         self.src.mkdir()
         self.assertEqual(self.run_main(), 0)
         self.assertTrue((self.out / "_Footer.md").is_file())
+
+    def test_out_overlapping_src_refused(self):
+        write(self.src, HOME, "development", "Home.md", "h\n")
+        page = self.src / HOME / "development" / "wiki" / "Home.md"
+        work = self.root / "work"  # a throwaway cwd, never the real repo
+        work.mkdir()
+        old = os.getcwd()
+        os.chdir(work)
+        self.addCleanup(os.chdir, old)
+        for out in (self.src, self.root, self.src / "..", work, Path(".")):
+            rc = build.main(["--src", str(self.src), "--out", str(out), "--config", str(self.cfg)])
+            self.assertEqual(rc, 1, out)
+        self.assertEqual(page.read_bytes(), b"h\n")
+
+    def test_out_is_a_file_refused(self):
+        self.src.mkdir()
+        self.out.write_text("x", encoding="utf-8")
+        self.assertEqual(self.run_main(), 1)
+        self.assertEqual(self.out.read_text(encoding="utf-8"), "x")
 
 
 if __name__ == "__main__":

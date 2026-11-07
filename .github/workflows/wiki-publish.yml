@@ -20,7 +20,7 @@ on:
     types: [wiki-publish]
 
 concurrency:
-  group: wiki-publish
+  group: ${{ github.event_name == 'pull_request' && format('wiki-pr-{0}', github.ref) || 'wiki-publish' }}
   cancel-in-progress: false
 
 jobs:
@@ -62,7 +62,7 @@ jobs:
           retention-days: 7
 
       - name: Publish to the wiki
-        if: github.event_name != 'pull_request' && vars.WIKI_PUBLISH_LIVE == 'true'
+        if: github.event_name != 'pull_request' && vars.WIKI_PUBLISH_LIVE == 'true' && github.ref_name == 'development'
         env:
           WIKI_URL: https://x-access-token:${{ github.token }}@github.com/rmx-lt/blade-of-grass.wiki.git
         run: |
