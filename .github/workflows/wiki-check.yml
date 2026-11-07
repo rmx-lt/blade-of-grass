@@ -1,5 +1,6 @@
 # Reusable: checks the PR body rules (Wiki:, Depends on:) with
-# tools/wiki/check_pr.py from blade-of-grass@development. Callers name the job
+# tools/wiki/check_pr.py from blade-of-grass (development; the PR itself in
+# blade-of-grass). Callers name the job
 # `wiki-check`, so the required status context is `wiki-check / check`.
 # Spec: https://github.com/rmx-lt/blade-of-grass/issues/30
 name: wiki-check
@@ -19,7 +20,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: rmx-lt/blade-of-grass
-          ref: development
+          # In blade-of-grass itself, run the checker from the PR, so a change
+          # to it is tested by its own PR; everywhere else, from development.
+          ref: ${{ github.repository == 'rmx-lt/blade-of-grass' && github.sha || 'development' }}
           path: .bog
 
       - name: Check the PR body
