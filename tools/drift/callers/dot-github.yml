@@ -1,0 +1,26 @@
+# Caller of the shared rmx-lt workflows (source: rmx-lt/blade-of-grass,
+# https://github.com/rmx-lt/blade-of-grass/issues/30). No wiki-dispatch job:
+# this repo has no wiki/ folder.
+name: rmx
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+  pull_request:
+    types: [opened, synchronize, edited, reopened]
+    branches: [development]
+
+permissions: {}
+
+jobs:
+  add-to-project:
+    if: github.event_name == 'issues'
+    uses: rmx-lt/blade-of-grass/.github/workflows/add-to-project.yml@development
+    secrets: inherit
+
+  wiki-check:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: rmx-lt/blade-of-grass/.github/workflows/wiki-check.yml@development
