@@ -34,3 +34,7 @@ blade-of-grass/            ← this repo
 │   └── rmx-mower-modem-probe/
 └── rmx-client/
 ```
+
+## License
+
+Code and documentation are licensed under [Apache-2.0](LICENSE).
