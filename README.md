@@ -4,7 +4,7 @@ An open source **robotic lawn mower** project: the mower, a cloud server it talk
 
 This is the **meta repository**. The project lives on GitHub:
 
-- **[Wiki](https://github.com/rmx-lt/blade-of-grass/wiki)**: overview, architecture, and the docs of every component (server, app probe, gateway probe).
+- **[Wiki](https://github.com/rmx-lt/blade-of-grass/wiki)**: overview, architecture, and the docs of every component (server, app probe, gateway probe), written in each repo's `wiki/` folder, rules: [Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/blob/development/wiki/Wiki-Policy.md).
 - **[Project board](https://github.com/orgs/rmx-lt/projects/1)**: what is done, in progress, next and planned, as issues across all repos.
 
 ## Repos
