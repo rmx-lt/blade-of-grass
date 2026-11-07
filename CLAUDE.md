@@ -5,7 +5,7 @@ Applies to this repo and every component repo cloned inside it (`rmx-server/*`, 
 ## Where things live
 
 - **Code:** the repos of the GitHub organization `rmx-lt` (all public).
-- **Knowledge:** the wiki of this repo, https://github.com/rmx-lt/blade-of-grass/wiki. Local clone `C:\Projects\blade-of-grass\blade-of-grass.wiki` (`git pull` before reading, commit and push after editing). Pages: `Home`, `Server*`, `Backend-Probe`, `Modem-*`; the sidebar lists them all. Code comments cite pages as "wiki Server §N".
+- **Knowledge:** the wiki, https://github.com/rmx-lt/blade-of-grass/wiki. Pages live in the owning repo's `wiki/` folder and change by PR. Read [Wiki-Policy](https://github.com/rmx-lt/blade-of-grass/wiki/Wiki-Policy) (local `wiki/Wiki-Policy.md`) before writing docs. **Transition until https://github.com/rmx-lt/blade-of-grass/issues/33:** migrated pages (already in a `wiki/` folder): `wiki/` only; the rest: the GitHub wiki clone `C:\Projects\blade-of-grass\blade-of-grass.wiki` (`git pull` before reading, commit and push after editing). Code comments cite pages as "wiki `<Page>` §N".
 - **ESP hardware facts** reusable beyond this project (boards, chips, ESP-IDF, lessons): the private hub `C:\Repos\esp-knowledge` (`jRmx0/esp-knowledge`), read its `INDEX.md` before firmware or board work. Mower-specific hardware decisions: wiki `Mower-Hardware`.
 - **Work:** issues in the matching repo, on the org project **Blade of Grass** (`gh project … 1 --owner rmx-lt`, https://github.com/orgs/rmx-lt/projects/1). Use the `planning-work-in-github-issues` skill.
 
@@ -21,7 +21,6 @@ Issue types: Task, Bug, Feature, and Epic for parent issues that group sub-issue
 
 ## Rules
 
-- Never commit or write to the wiki: passwords, tokens, private keys, IMEI/ICCID/IMSI, home IPs, personal emails or names. The wiki is public.
-- Server changes get a dated entry on the wiki page `Server-Changelog` (what, why, backup, undo).
+- Never commit or write to the wiki: passwords, tokens, private keys, IMEI/ICCID/IMSI, home IPs, personal emails or names. The wiki is public; see Wiki-Policy.
 - Branches in every rmx-lt repo: `feat/<issue#>-slug` → PR → `development` (default) → PR → `production`. Feature branches are deleted on merge; there is no `main`.
 - Merging to `production` deploys: rmx-server-infra (playbook) and rmx-server-app-probe (probe image) go to the VPS. Merging to `development` deploys nothing.
