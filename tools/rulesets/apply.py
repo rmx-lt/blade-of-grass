@@ -41,27 +41,50 @@ def normalize(ruleset: dict) -> dict:
     for k in IGNORED:
         r.pop(k, None)
     r["rules"] = sorted(r.get("rules", []), key=lambda rule: rule["type"])
+    for rule in r["rules"]:
+        params = rule.get("parameters")
+        if isinstance(params, dict) and isinstance(params.get("required_status_checks"), list):
+            params["required_status_checks"] = sorted(
+                params["required_status_checks"], key=lambda c: c.get("context", ""))
     return r
+
+
+def prune(have, want):
+    """Drop dict keys of `have` that `want` does not define (GitHub fills defaults).
+    Lists of equal length are pruned elementwise; others are kept so they differ."""
+    if isinstance(have, dict) and isinstance(want, dict):
+        return {k: prune(v, want[k]) for k, v in have.items() if k in want}
+    if isinstance(have, list) and isinstance(want, list) and len(have) == len(want):
+        return [prune(h, w) for h, w in zip(have, want)]
+    return have
 
 
 def desired(repo: str, shared: list[dict], ci: dict) -> list[dict]:
     return [copy.deepcopy(r) for r in [*shared, *ci.get(repo, [])]]
 
 
-def plan(repo: str, current: list[dict], wanted: list[dict]) -> list[tuple[str, str, dict | None]]:
-    have = {}
+def plan(repo: str, current: list[dict], wanted: list[dict]) -> list[tuple[str, str, dict | None, int | None]]:
+    """Actions as (verb, name, body, id of the existing ruleset or None)."""
+    have: dict[str, dict] = {}
+    actions: list[tuple[str, str, dict | None, int | None]] = []
+    extras = []
     for r in current:
-        have.setdefault(r["name"], r)
+        if r["name"] in have:
+            extras.append(r)
+        else:
+            have[r["name"]] = r
     want_names = {w["name"] for w in wanted}
-    actions: list[tuple[str, str, dict | None]] = []
     for w in wanted:
-        if w["name"] not in have:
-            actions.append(("create", w["name"], w))
-        elif normalize(have[w["name"]]) != normalize(w):
-            actions.append(("update", w["name"], w))
+        h = have.get(w["name"])
+        if h is None:
+            actions.append(("create", w["name"], w, None))
+        else:
+            nw = normalize(w)
+            if prune(normalize(h), nw) != nw:
+                actions.append(("update", w["name"], w, h.get("id")))
     for r in current:
-        if r["name"] not in want_names:
-            actions.append(("delete", r["name"], None))
+        if r["name"] not in want_names or r in extras:
+            actions.append(("delete", r["name"], None, r.get("id")))
     return actions
 
 
@@ -96,8 +119,7 @@ def main(argv: list[str] | None = None, gh=gh) -> int:
             if not actions and not wiki_change:
                 print(f"{repo}: in sync")
                 continue
-            ids = {r["name"]: r["id"] for r in current}
-            for action, name, body in actions:
+            for action, name, body, rid in actions:
                 print(f"{repo}: {action} {name}")
                 if args.apply:
                     base = f"repos/{ORG}/{repo}/rulesets"
@@ -105,9 +127,9 @@ def main(argv: list[str] | None = None, gh=gh) -> int:
                     if action == "create":
                         gh(["api", "-X", "POST", base, "--input", "-"], payload)
                     elif action == "update":
-                        gh(["api", "-X", "PUT", f"{base}/{ids[name]}", "--input", "-"], payload)
+                        gh(["api", "-X", "PUT", f"{base}/{rid}", "--input", "-"], payload)
                     else:
-                        gh(["api", "-X", "DELETE", f"{base}/{ids[name]}"])
+                        gh(["api", "-X", "DELETE", f"{base}/{rid}"])
             if wiki_change:
                 print(f"{repo}: has_wiki {str(has_wiki).lower()} -> {str(want_wiki).lower()}")
                 if args.apply:

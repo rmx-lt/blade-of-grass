@@ -72,11 +72,11 @@ class PlanTest(unittest.TestCase):
 
     def test_empty_creates_two(self):
         p = apply.plan("rmx-server-app", [], self.want())
-        self.assertEqual([a for a, _, _ in p], ["create", "create"])
+        self.assertEqual([a for a, *_ in p], ["create", "create"])
 
     def test_empty_creates_three_with_ci(self):
         p = apply.plan("rmx-server-infra", [], self.want("rmx-server-infra"))
-        self.assertEqual([a for a, _, _ in p], ["create"] * 3)
+        self.assertEqual([a for a, *_ in p], ["create"] * 3)
 
     def test_in_sync_even_if_reordered(self):
         self.assertEqual(apply.plan("rmx-server-app", synced("rmx-server-app"), self.want()), [])
@@ -85,21 +85,68 @@ class PlanTest(unittest.TestCase):
         cur = synced("rmx-server-app")
         cur[1]["rules"][0]["parameters"]["required_status_checks"][0]["context"] = "old"
         p = apply.plan("rmx-server-app", cur, self.want())
-        self.assertEqual([(a, n) for a, n, _ in p], [("update", "rmx: wiki-check")])
+        self.assertEqual([(a, n) for a, n, *_ in p], [("update", "rmx: wiki-check")])
 
     def test_deletes_last(self):
         old = [{"id": 9, "name": "stable branches", "rules": [], "conditions": {}},
                {"id": 8, "name": "main", "rules": [], "conditions": {}}]
         p = apply.plan("rmx-server-app", old, self.want())
-        self.assertEqual([a for a, _, _ in p], ["create", "create", "delete", "delete"])
-        self.assertTrue(all(b is None for a, _, b in p if a == "delete"))
+        self.assertEqual([a for a, *_ in p], ["create", "create", "delete", "delete"])
+        self.assertTrue(all(b is None for a, _, b, _ in p if a == "delete"))
 
     def test_update_and_create_before_delete(self):
         cur = [as_github(self.want()[0], 1),
                {"id": 9, "name": "old", "rules": [], "conditions": {}}]
         cur[0]["enforcement"] = "disabled"
         p = apply.plan("rmx-server-app", cur, self.want())
-        self.assertEqual([a for a, _, _ in p], ["update", "create", "delete"])
+        self.assertEqual([a for a, *_ in p], ["update", "create", "delete"])
+
+
+LIVE_INFRA = {"id":26266914,"name":"stable branches","target":"branch","source_type":"Repository","source":"rmx-lt/rmx-server-infra","enforcement":"active","conditions":{"ref_name":{"exclude":[],"include":["refs/heads/development","refs/heads/production"]}},"rules":[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":False,"required_reviewers":[],"require_code_owner_review":False,"dismissal_restriction":{"enabled":False,"allowed_actors":[]},"require_last_push_approval":False,"required_review_thread_resolution":False,"require_extra_approval_for_unattributed_changes":False,"allowed_merge_methods":["merge","squash","rebase"]}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":False,"do_not_enforce_on_create":False,"required_status_checks":[{"context":"check","integration_id":15368},{"context":"db-roundtrip","integration_id":15368},{"context":"container","integration_id":15368}]}}],"node_id":"RRS_x","created_at":"a","updated_at":"b","bypass_actors":[],"current_user_can_bypass":"never","_links":{}}
+
+
+def wanted_like_live():
+    w = copy.deepcopy(LIVE_INFRA)
+    for k in apply.IGNORED:
+        w.pop(k, None)
+    w["name"] = "rmx: live"
+    for rule in w["rules"]:
+        p = rule.get("parameters", {})
+        for k in ("required_reviewers", "dismissal_restriction",
+                  "require_extra_approval_for_unattributed_changes", "do_not_enforce_on_create"):
+            p.pop(k, None)
+    w["rules"].reverse()
+    w["rules"][0]["parameters"]["required_status_checks"].reverse()
+    return w
+
+
+class DefaultsTest(unittest.TestCase):
+    def have(self):
+        h = copy.deepcopy(LIVE_INFRA)
+        h["name"] = "rmx: live"
+        return h
+
+    def test_github_defaults_are_not_differences(self):
+        self.assertEqual(apply.plan("x", [self.have()], [wanted_like_live()]), [])
+
+    def test_changed_check_list_updates(self):
+        h = self.have()
+        h["rules"][3]["parameters"]["required_status_checks"].pop()
+        p = apply.plan("x", [h], [wanted_like_live()])
+        self.assertEqual([(a, n) for a, n, *_ in p], [("update", "rmx: live")])
+
+    def test_extra_rule_on_github_updates(self):
+        h = self.have()
+        h["rules"].append({"type": "required_linear_history"})
+        p = apply.plan("x", [h], [wanted_like_live()])
+        self.assertEqual([(a, n) for a, n, *_ in p], [("update", "rmx: live")])
+
+    def test_duplicate_names(self):
+        a, b = self.have(), self.have()
+        a["id"], b["id"] = 5, 6
+        a["enforcement"] = "disabled"
+        p = apply.plan("x", [a, b], [wanted_like_live()])
+        self.assertEqual([(x, i) for x, _, _, i in p], [("update", 5), ("delete", 6)])
 
 
 class FakeGh:

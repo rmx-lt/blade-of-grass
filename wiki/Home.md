@@ -73,7 +73,7 @@ Pages live in each repo's `wiki/` folder and change by pull request. The rules a
 
 ## Repo settings
 
-Branch rulesets and `has_wiki` of every rmx-lt repo come from `tools/rulesets/` in blade-of-grass. Change the definitions there, run `python tools/rulesets/apply.py` (dry run), then `python tools/rulesets/apply.py --apply`. Organization rulesets would need GitHub Team.
+Branch rulesets and `has_wiki` of every rmx-lt repo come from `tools/rulesets/` in blade-of-grass. Change the definitions there, run `python tools/rulesets/apply.py` (dry run), then `python tools/rulesets/apply.py --apply`. They are applied per repo because organization rulesets need GitHub Team.
 
 ## License
 
