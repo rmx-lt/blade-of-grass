@@ -15,7 +15,7 @@ Applies to this repo and every component repo cloned inside it (`rmx-server/*`, 
 |---|---|
 | Status | Backlog (not scheduled), Todo (next up), In Progress, Done |
 | Priority | High, Medium, Low |
-| Area | Firmware, Modem, Backend, Client, Infra, Docs |
+| Area | Autopilot, Gateway, Backend, Frontend, Infra, Docs |
 
 Issue types: Task, Bug, Feature, and Epic for parent issues that group sub-issues. Cross-cutting work (protocol, docs) goes in this repo's issues.
 
