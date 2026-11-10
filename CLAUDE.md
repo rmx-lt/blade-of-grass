@@ -14,6 +14,7 @@ Applies to this repo and every component repo cloned inside it (`rmx-server/*`, 
 This repo holds the tooling for all rmx-lt repos:
 
 - **Shared workflows** in `.github/workflows/`: `add-to-project` (adds new issues to the board; fields stay manual), `wiki-check` (PR body rules), `wiki-dispatch` (triggers `wiki-publish` on wiki changes). Each repo calls them from its own `rmx.yml`, pinned to `@development`.
+- **`tools/device-ca/device-ca.ps1`**: device CA (offline root, issuing CA, sign, revoke, CRL). The CA directory stays outside the repo. See wiki `Device-CA`.
 - **`tools/rulesets/apply.py`**: one branch-ruleset definition applied to every repo (dry run by default).
 - **`tools/drift/scan.py`**: weekly `drift-scan` workflow; opens or updates one issue when a repo drifts (callers, rulesets, wiki, LICENSE, README).
 - **`tools/wiki/`**: the wiki builder and the PR checker behind `wiki-publish` and `wiki-check`.

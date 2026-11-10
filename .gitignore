@@ -7,8 +7,15 @@
 *_ed25519
 *.pem
 *.key
+*.csr
+*.crl
+*.srl
 .env
 .env.*
+
+# Device CA working directory, if a run is pointed at the clone by mistake.
+# The real CA belongs in %USERPROFILE%\.rmx-device-ca (see wiki Device-CA).
+.rmx-device-ca/
 
 # Editor / OS clutter
 .vscode/
