@@ -50,7 +50,7 @@ pwsh -File tools/device-ca/device-ca.ps1 init
 
 ## 4. Sign a device certificate
 
-The CSR common name must match `^[A-Za-z0-9_-]{1,32}$`, the same rule as the device name. The CSR key must be ECDSA P-256. Anything else is refused and nothing is issued. The openssl index has `unique_subject = yes`: revoke the current certificate before signing the same CN again.
+The CSR common name must match `^[A-Za-z0-9_-]{1,32}$`, the same rule as the device name, and must not be `app`, `probe-app`, `events` or `status` (any case): the broker takes the CN as the username, so such a certificate would get a server login's ACL (all of `mower/#`) or collide with the shared topics `mower/events/#` and `mower/status/server`. The CSR key must be ECDSA P-256. Anything else is refused and nothing is issued. The openssl index has `unique_subject = yes`: revoke the current certificate before signing the same CN again.
 
 ```powershell
 pwsh -File tools/device-ca/device-ca.ps1 sign C:\csr\mower-01.csr

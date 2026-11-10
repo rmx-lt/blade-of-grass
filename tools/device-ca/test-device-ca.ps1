@@ -89,6 +89,14 @@ try {
     if ($code -eq 0) { throw 'bad CN was signed' }
     if (Test-Path -LiteralPath (Join-Path $work 'bad.device.pem')) { throw 'bad CN wrote a certificate' }
 
+    $appCsr = Join-Path $work 'app.csr'
+    & $openssl req -new -key $badKey -out $appCsr -sha256 -subj '/CN=app'
+    if ($LASTEXITCODE -ne 0) { throw 'reserved CSR failed' }
+    Write-Output '===== RESERVED CN ====='
+    $code = Invoke-Tool @('sign', $appCsr, '-CaDir', $ca, '-PassFile', $passFile)
+    Write-Output "reserved CN exit: $code"
+    if ($code -eq 0) { throw 'reserved CN app was signed' }
+
     $longCn = 'a' * 33
     $longCsr = Join-Path $work 'long.csr'
     & $openssl req -new -key $badKey -out $longCsr -sha256 -subj "/CN=$longCn"

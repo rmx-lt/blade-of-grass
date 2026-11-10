@@ -54,6 +54,7 @@ $ErrorActionPreference = 'Stop'
 $RootCn = 'RMX Device Root CA'
 $IssuingCn = 'RMX Device Issuing CA'
 $CnPattern = '^[A-Za-z0-9_-]{1,32}$'
+$ReservedCns = @('app', 'probe-app', 'events', 'status')
 
 function Write-Err([string]$Message) {
     [Console]::Error.WriteLine($Message)
@@ -306,6 +307,14 @@ function Assert-DeviceCsr([string]$CsrPath) {
     $cn = Get-CsrCommonName $CsrPath
     if ($cn -notmatch $CnPattern) {
         Write-Err "Refusing CSR: CN '$cn' does not match $CnPattern (the device-name rule)."
+        exit 2
+    }
+    # The broker uses the CN as the username (use_identity_as_username), so a
+    # CN equal to a server login would get that login's ACL (app, probe-app:
+    # all of mower/#), and events/status would collide with the shared topics
+    # mower/events/# and mower/status/server (wiki Device-CA).
+    if ($ReservedCns -contains $cn.ToLowerInvariant()) {
+        Write-Err "Refusing CSR: CN '$cn' is reserved (server login or shared topic name)."
         exit 2
     }
     $text = Invoke-OpenSsl -ArgumentList @('req', '-in', $CsrPath, '-noout', '-text')
