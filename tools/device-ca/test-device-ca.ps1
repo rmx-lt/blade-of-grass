@@ -1,5 +1,5 @@
 # Throwaway CA test for tools/device-ca/device-ca.ps1. wiki Device-CA.
-# Uses -PassFile, which is test-only. Deletes the CA directory before exiting.
+# Uses -PassFile and -RootPassFile, which are test-only. Deletes the CA directory before exiting.
 $ErrorActionPreference = 'Stop'
 
 $openssl = $null
@@ -28,13 +28,22 @@ function Assert-Exit([int]$Actual, [int]$Expected, [string]$What) {
 try {
     if (Test-Path -LiteralPath $proto) { Remove-Item -LiteralPath $proto -Recurse -Force }
     New-Item -ItemType Directory -Path $work | Out-Null
-    $passFile = Join-Path $work 'pass.txt'
-    $passphrase = 'throwaway-test-passphrase'
+    $passFile = Join-Path $work 'issuing-pass.txt'
+    $rootPassFile = Join-Path $work 'root-pass.txt'
+    $passphrase = 'throwaway-issuing-passphrase'
+    $rootPassphrase = 'throwaway-root-passphrase'
     [IO.File]::WriteAllText($passFile, $passphrase)
+    [IO.File]::WriteAllText($rootPassFile, $rootPassphrase)
+    $same = Join-Path $work 'same-pass.txt'
+    [IO.File]::WriteAllText($same, 'same-passphrase-value')
+    $code = Invoke-Tool @('init', '-CaDir', (Join-Path $work 'same-ca'), '-PassFile', $same, '-RootPassFile', $same)
+    if ($code -eq 0) { throw 'identical passphrases were accepted' }
 
     $ca = Join-Path $work 'ca'
-    $code = Invoke-Tool @('init', '-CaDir', $ca, '-PassFile', $passFile)
+    $code = Invoke-Tool @('init', '-CaDir', $ca, '-PassFile', $passFile, '-RootPassFile', $rootPassFile)
     Assert-Exit $code 0 'init'
+    $code = Invoke-Tool @('crl', '-CaDir', $ca, '-PassFile', $rootPassFile)
+    if ($code -eq 0) { throw 'root passphrase unlocked the issuing key' }
 
     foreach ($name in @('root.key.pem', 'issuing.key.pem')) {
         $keyPath = Join-Path $ca "private\$name"
@@ -119,7 +128,7 @@ try {
     if ($code -eq 0) { throw 'wrong passphrase was accepted' }
 
     $capCa = Join-Path $work 'cap'
-    $code = Invoke-Tool @('init', '-CaDir', $capCa, '-PassFile', $passFile, '-RootDays', '40', '-IssuingDays', '30', '-DeviceDays', '3650', '-CrlDays', '10')
+    $code = Invoke-Tool @('init', '-CaDir', $capCa, '-PassFile', $passFile, '-RootPassFile', $rootPassFile, '-RootDays', '40', '-IssuingDays', '30', '-DeviceDays', '3650', '-CrlDays', '10')
     Assert-Exit $code 0 'short init'
     $capCsr = Join-Path $work 'cap.csr'
     & $openssl req -new -key $deviceKey -out $capCsr -sha256 -subj '/CN=mower-03'
@@ -137,9 +146,9 @@ try {
     if ($deviceEnd -ge $issuingEnd) { throw 'device certificate outlives the issuing CA' }
     if (($deviceEnd - [DateTime]::UtcNow).TotalDays -gt 40) { throw 'device lifetime was not capped by the issuing CA' }
 
-    $hits = Get-ChildItem -LiteralPath $ca -Recurse -File | Where-Object {
+    $hits = Get-ChildItem -LiteralPath $ca, $capCa -Recurse -File | Where-Object {
         $text = [IO.File]::ReadAllText($_.FullName)
-        $text.Contains($passphrase)
+        $text.Contains($passphrase) -or $text.Contains($rootPassphrase)
     }
     if ($hits) { throw "passphrase was written into the CA directory: $($hits.FullName -join ', ')" }
 

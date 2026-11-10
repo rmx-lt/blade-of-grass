@@ -14,7 +14,7 @@ The tool is `tools/device-ca/device-ca.ps1`. It shells out to `openssl` (on Wind
 
 `pathlen:1` on the root means exactly one CA may follow it in a chain. `pathlen:0` on the issuing CA means that CA signs end-entity certificates only. Putting `pathlen:0` on the root would forbid the issuing CA, and device chains would not verify.
 
-The root key is used to create or replace the issuing CA. Day to day, only the issuing key is used. Both private keys are encrypted with AES-256-CBC. The passphrase is typed when the tool asks for it. The tool passes it to the `openssl` child process and does not write it to a file, the environment of the shell, the repo, or a log. `-PassFile` exists so the automated test can run; it is not for the real CA.
+The root key is used to create the issuing CA, and later only to replace that issuing CA by hand. Day to day, only the issuing key is used. The two keys are encrypted with AES-256-CBC under different passphrases. The root passphrase protects `private/root.key.pem` and stays on the PC, stored apart from the issuing passphrase. The issuing passphrase protects `private/issuing.key.pem` and is the only one `sign`, `revoke`, and `crl` ask for. They must differ, so moving the issuing CA to the server does not also hand over the root passphrase. The tool passes each passphrase to the `openssl` child process and does not write it to a file, the environment of the shell, the repo, or a log. `-PassFile` (issuing) and `-RootPassFile` (root) exist so the automated test can run; they are not for the real CA.
 
 A device certificate is valid for 3650 days or until the day before the issuing CA expires, whichever is sooner. A certificate is not renewed automatically. Revocation is a CRL.
 
@@ -46,7 +46,7 @@ Names: root subject `CN=RMX Device Root CA`, issuing subject `CN=RMX Device Issu
 pwsh -File tools/device-ca/device-ca.ps1 init
 ```
 
-`init` asks for the passphrase twice, writes the files in section 2, and generates an empty CRL so a server can load `crl.pem` before any device is revoked. The CRL lifetime defaults to 3650 days (`-CrlDays`) so an untouched CRL does not expire and cut the devices off. Regenerate it on revoke, and again before `nextUpdate`.
+`init` asks for the root passphrase twice, then the issuing passphrase twice. The two passphrases must differ. It writes the files in section 2, and generates an empty CRL so a server can load `crl.pem` before any device is revoked. The CRL lifetime defaults to 3650 days (`-CrlDays`) so an untouched CRL does not expire and cut the devices off. Regenerate it on revoke, and again before `nextUpdate`.
 
 ## 4. Sign a device certificate
 
@@ -55,6 +55,8 @@ The CSR common name must match `^[A-Za-z0-9_-]{1,32}$`, the same rule as the dev
 ```powershell
 pwsh -File tools/device-ca/device-ca.ps1 sign C:\csr\mower-01.csr
 ```
+
+The command asks for the issuing passphrase. It does not ask for the root passphrase.
 
 Outputs, next to the CSR (or in `-OutDir`):
 
@@ -73,7 +75,7 @@ pwsh -File tools/device-ca/device-ca.ps1 revoke C:\csr\mower-01.device.pem
 pwsh -File tools/device-ca/device-ca.ps1 crl
 ```
 
-`revoke` accepts a serial from the index or a path to the certificate, marks the row revoked, and regenerates `crl.pem`. `crl` regenerates the CRL without changing the index. The CRL is PEM and is signed by the issuing CA.
+`revoke` and `crl` ask for the issuing passphrase. `revoke` accepts a serial from the index or a path to the certificate, marks the row revoked, and regenerates `crl.pem`. `crl` regenerates the CRL without changing the index. The CRL is PEM and is signed by the issuing CA.
 
 Mosquitto checks the CRL of the CA that issued the client certificate. For these devices that is the issuing CA, not the root. `crl.pem` is the file to point `crlfile` at.
 
@@ -88,8 +90,8 @@ The device listener is port 8884 ([rmx-server-infra#67](https://github.com/rmx-l
 
 ## 7. What never leaves the PC
 
-- `private/root.key.pem` and its passphrase
-- `private/issuing.key.pem`, until the move in section 8
+- `private/root.key.pem` and the root passphrase. Keep that passphrase on the PC, separate from the issuing passphrase, including after the move in section 8.
+- `private/issuing.key.pem` and the issuing passphrase, until the move in section 8
 - `db/` (the index, serials, and copies of issued certificates)
 
 `root.pem`, `issuing.pem`, and `crl.pem` are the public files. The chain file goes to the device it belongs to.
@@ -98,4 +100,6 @@ The device listener is port 8884 ([rmx-server-infra#67](https://github.com/rmx-l
 
 Device management on the server ([rmx-server-app#42](https://github.com/rmx-lt/rmx-server-app/issues/42)) can take over signing without reissuing device certificates. The issuing certificate stays the same, so existing device certificates still chain to the same root.
 
-What moves is this issuing key, `issuing.pem`, and `db/` (the index has to come with the key, or a serial could be reused). The root key stays on the PC. Devices keep the certificates they already have, because the issuer is the same certificate. Minting a second issuing CA is a different change: it does not invalidate certificates the current issuing CA already signed, and it is not required for the move.
+What moves is this issuing key, its passphrase, `issuing.pem`, and `db/` (the index has to come with the key, or a serial could be reused). The root key and the root passphrase stay on the PC. Devices keep the certificates they already have, because the issuer is the same certificate. Minting a second issuing CA is a different change: it does not invalidate certificates the current issuing CA already signed, and it is not required for the move.
+
+Replacing the issuing CA is not a command in this tool. Do it by hand on the PC: create a new issuing key encrypted with the issuing passphrase, then sign that request with `openssl x509 -req -CA root.pem -CAkey private/root.key.pem` and the root passphrase. `sign`, `revoke`, and `crl` never use the root key.

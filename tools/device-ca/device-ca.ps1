@@ -6,9 +6,11 @@
   Shells out to openssl (Git for Windows is fine). Creates an offline root and
   an issuing CA, signs device CSRs, and writes the issuing CA's CRL.
 
-  The passphrase is typed at the prompt. It is handed to the openssl child
-  process only, and is never written to a file, the repo, or the log.
-  -PassFile is for the automated test: do not use it for the real CA.
+  The root key and the issuing key have different passphrases. init asks for
+  both. sign, revoke, and crl ask only for the issuing passphrase. Each one is
+  handed to the openssl child process and is never written to a file, the
+  repo, or the log. -PassFile (issuing) and -RootPassFile (root) are for the
+  automated test: do not use them for the real CA.
 
 .EXAMPLE
   pwsh -File tools/device-ca/device-ca.ps1 init
@@ -35,8 +37,11 @@ param(
 
     [string]$OutDir,
 
-    # Test only. Reads the passphrase from a file. Never use this for the real CA.
+    # Test only. Issuing-key passphrase file. Never use this for the real CA.
     [string]$PassFile,
+
+    # Test only. Root-key passphrase file, used by init. Never use this for the real CA.
+    [string]$RootPassFile,
 
     [int]$RootDays = 7300,
     [int]$IssuingDays = 3650,
@@ -90,24 +95,30 @@ function Assert-CaDirOutsideRepo([string]$Path) {
     }
 }
 
-function Read-Passphrase([bool]$Confirm) {
-    if ($PassFile) {
-        Write-Err '-PassFile is for tests only. Do not store the real CA passphrase in a file.'
-        if (-not (Test-Path -LiteralPath $PassFile)) { throw "PassFile not found: $PassFile" }
-        $text = [IO.File]::ReadAllText($PassFile) -replace '[\r\n]+$', ''
-        if ([string]::IsNullOrEmpty($text)) { throw 'PassFile is empty.' }
+function Read-Passphrase {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [string]$File,
+        [string]$FileFlag,
+        [bool]$Confirm
+    )
+    if ($File) {
+        Write-Err "$FileFlag is for tests only. Do not store a real CA passphrase in a file."
+        if (-not (Test-Path -LiteralPath $File)) { throw "$FileFlag file not found: $File" }
+        $text = [IO.File]::ReadAllText($File) -replace '[\r\n]+$', ''
+        if ([string]::IsNullOrEmpty($text)) { throw "$FileFlag is empty." }
         return $text
     }
-    $first = Read-Host -AsSecureString 'CA passphrase'
+    $first = Read-Host -AsSecureString $Label
     $plain = ConvertFrom-SecureStringPlain $first
-    if ([string]::IsNullOrEmpty($plain)) { throw 'A passphrase is required.' }
+    if ([string]::IsNullOrEmpty($plain)) { throw "$Label is required." }
     if ($Confirm) {
-        $second = Read-Host -AsSecureString 'Confirm CA passphrase'
+        $second = Read-Host -AsSecureString "Confirm $Label"
         $again = ConvertFrom-SecureStringPlain $second
         if ($plain -cne $again) {
             $plain = $null
             $again = $null
-            throw 'Passphrases did not match.'
+            throw "$Label did not match."
         }
         $again = $null
     }
@@ -387,7 +398,7 @@ function Resolve-RevokeCert($Paths, [string]$SerialOrCert) {
     return [pscustomobject]@{ Already = $false; Path = $path; Serial = $match.Serial }
 }
 
-function Initialize-Ca([string]$Passphrase) {
+function Initialize-Ca([string]$RootPassphrase, [string]$IssuingPassphrase) {
     Assert-CaDirOutsideRepo $CaDir
     if ($RootDays -lt 2) { throw '-RootDays must be at least 2.' }
     if ($IssuingDays -ge $RootDays) { throw '-IssuingDays must be shorter than -RootDays so the issuing certificate expires first.' }
@@ -408,22 +419,22 @@ function Initialize-Ca([string]$Passphrase) {
     Write-TextFile (Join-Path $paths.Db 'crlnumber') "01`n"
     Write-CaConfig $paths
 
-    New-EncryptedKey $paths.RootKey $Passphrase $paths.Root
-    $root = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $Passphrase -ArgumentList @(
+    New-EncryptedKey $paths.RootKey $RootPassphrase $paths.Root
+    $root = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $RootPassphrase -ArgumentList @(
         'req', '-new', '-x509', '-key', $paths.RootKey, '-passin', 'env:RMX_DEVICE_CA_PASS',
         '-out', $paths.RootCert, '-days', "$RootDays", '-sha256',
         '-subj', "/CN=$RootCn", '-config', $paths.Config, '-extensions', 'v3_root'
     )
     Assert-OpenSsl $root 'create root certificate'
 
-    New-EncryptedKey $paths.IssuingKey $Passphrase $paths.Root
+    New-EncryptedKey $paths.IssuingKey $IssuingPassphrase $paths.Root
     $csr = Join-Path $paths.Db 'issuing.csr.pem'
-    $request = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $Passphrase -ArgumentList @(
+    $request = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $IssuingPassphrase -ArgumentList @(
         'req', '-new', '-key', $paths.IssuingKey, '-passin', 'env:RMX_DEVICE_CA_PASS',
         '-out', $csr, '-sha256', '-subj', "/CN=$IssuingCn"
     )
     Assert-OpenSsl $request 'create issuing CSR'
-    $issued = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $Passphrase -ArgumentList @(
+    $issued = Invoke-OpenSsl -WorkingDirectory $paths.Root -Passphrase $RootPassphrase -ArgumentList @(
         'x509', '-req', '-in', $csr, '-CA', $paths.RootCert, '-CAkey', $paths.RootKey,
         '-passin', 'env:RMX_DEVICE_CA_PASS', '-CAserial', $paths.RootSerial, '-CAcreateserial',
         '-out', $paths.IssuingCert, '-days', "$IssuingDays", '-sha256',
@@ -431,7 +442,7 @@ function Initialize-Ca([string]$Passphrase) {
     )
     Assert-OpenSsl $issued 'sign issuing CA'
     Remove-Item -LiteralPath $csr -Force
-    Update-Crl $paths $Passphrase
+    Update-Crl $paths $IssuingPassphrase
 
     Write-Output "Root certificate: $($paths.RootCert)"
     Write-Output "Issuing certificate: $($paths.IssuingCert)"
@@ -506,20 +517,33 @@ function Export-Crl([string]$Passphrase) {
 }
 
 if (-not $Command) {
-    Write-Err 'Usage: device-ca.ps1 init|sign|revoke|crl [csr|serial|cert] [-CaDir path] [-PassFile test-only]'
+    Write-Err 'Usage: device-ca.ps1 init|sign|revoke|crl [csr|serial|cert] [-CaDir path] [-PassFile issuing-test-only] [-RootPassFile root-test-only]'
     exit 2
 }
 
 $script:OpenSsl = Find-OpenSsl
-$pass = $null
+$rootPass = $null
+$issuingPass = $null
 try {
-    $needsConfirm = $Command -eq 'init' -and -not $PassFile
-    $pass = Read-Passphrase $needsConfirm
-    switch ($Command) {
-        'init' { Initialize-Ca $pass }
-        'sign' { Sign-Device $pass }
-        'revoke' { Revoke-Device $pass }
-        'crl' { Export-Crl $pass }
+    if ($Command -eq 'init') {
+        if (($PassFile -or $RootPassFile) -and -not ($PassFile -and $RootPassFile)) {
+            throw 'init with a passphrase file needs both -PassFile (issuing key) and -RootPassFile (root key).'
+        }
+        $rootPass = Read-Passphrase -Label 'Root CA passphrase' -File $RootPassFile -FileFlag '-RootPassFile' -Confirm:(-not $RootPassFile)
+        $issuingPass = Read-Passphrase -Label 'Issuing CA passphrase' -File $PassFile -FileFlag '-PassFile' -Confirm:(-not $PassFile)
+        if ($rootPass -ceq $issuingPass) {
+            throw 'The root passphrase and the issuing passphrase must differ.'
+        }
+        Initialize-Ca $rootPass $issuingPass
+    }
+    else {
+        if ($RootPassFile) { throw '-RootPassFile is only used by init.' }
+        $issuingPass = Read-Passphrase -Label 'Issuing CA passphrase' -File $PassFile -FileFlag '-PassFile' -Confirm:$false
+        switch ($Command) {
+            'sign' { Sign-Device $issuingPass }
+            'revoke' { Revoke-Device $issuingPass }
+            'crl' { Export-Crl $issuingPass }
+        }
     }
 }
 catch {
@@ -527,8 +551,7 @@ catch {
     exit 1
 }
 finally {
-    if ($null -ne $pass) {
-        $pass = $null
-    }
+    $rootPass = $null
+    $issuingPass = $null
 }
 exit 0
