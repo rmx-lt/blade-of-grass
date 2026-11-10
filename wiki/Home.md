@@ -40,6 +40,7 @@ flowchart LR
 - **Client ↔ server:** HTTPS for the REST API and the client app itself, plus secure WebSockets for live updates. Browsers never talk to the MQTT broker directly.
 - **Inside the server:** every service runs in Docker. The database sits on an internal network that only the backend can reach.
 - **Safety lives on the mower.** It stops by itself if the connection or command acknowledgements are lost, and never relies on the server to stop the blades.
+- **Device CA:** per-device client certificates are signed on the owner's PC ([Device-CA](Device-CA)). The broker still uses password logins until the certificate listener is deployed.
 
 ## Public endpoints
 
