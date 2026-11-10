@@ -26,7 +26,7 @@
       ]
     }
   ],
-  "rmx-server-app-probe": [
+  "rmx-server-app": [
     {
       "name": "rmx: CI",
       "target": "branch",

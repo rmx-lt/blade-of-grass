@@ -21,7 +21,9 @@ def write(root: Path, repo: str, branch: str, name: str, text: str) -> None:
 
 class OwnerTest(unittest.TestCase):
     def test_owner_longest_prefix(self):
-        self.assertEqual(build.owner("Server-App-Probe-X", P, HOME), "rmx-server-app-probe")
+        nested = {**P, "rmx-server-app-x": "Server-App-X"}
+        self.assertEqual(build.owner("Server-App-X-Y", nested, HOME), "rmx-server-app-x")
+        self.assertEqual(build.owner("Server-App-Y", nested, HOME), "rmx-server-app")
         self.assertEqual(build.owner("Server-App", P, HOME), "rmx-server-app")
         self.assertEqual(build.owner("Server-Infra-Ansible", P, HOME), "rmx-server-infra")
         self.assertEqual(build.owner("Home", P, HOME), "blade-of-grass")
@@ -135,10 +137,10 @@ class RenderTest(unittest.TestCase):
         pages = {"Server-Infra": P_("Server-Infra", "rmx-server-infra", "x\n", "x\n")}
         files, warnings = build.render(pages, CONFIG)
         self.assertEqual(files["Server.md"], "This page moved to [Server-Infra](Server-Infra).\n")
-        self.assertEqual(len(CONFIG["stubs"]), 13)
+        self.assertEqual(len(CONFIG["stubs"]), 24)
         for old in CONFIG["stubs"]:
             self.assertIn(old + ".md", files)
-        self.assertEqual(len(warnings), 12)
+        self.assertEqual(len(warnings), 23)
         self.assertTrue(any("Server-Infra-Ansible" in w for w in warnings))
         self.assertFalse(any(w.endswith(": Server-Infra") for w in warnings))
 

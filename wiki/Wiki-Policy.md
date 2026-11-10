@@ -25,16 +25,14 @@ The GitHub wiki is a generated mirror, built from the `development` branch of ev
 
 A page that differs between `development` and `production` gets a banner "Not yet in production" with a link to the diff. It means the described change is merged but not deployed.
 
-A repo owns the pages whose names start with its prefix (the repo name without `rmx-`, words capitalised). The longest matching prefix wins: `Server-App-Probe-X` belongs to rmx-server-app-probe, not rmx-server-app. Pages with no repo prefix belong to blade-of-grass.
+A repo owns the pages whose names start with its prefix (the repo name without `rmx-`, words capitalised). If one prefix ever contains another, the longest match wins. Pages with no repo prefix belong to blade-of-grass.
 
 | Page name starts with | Owner repo |
 |---|---|
 | `Server-Infra` | rmx-server-infra |
 | `Server-App` | rmx-server-app |
-| `Server-App-Probe` | rmx-server-app-probe |
 | `Mower-Autopilot` | rmx-mower-autopilot |
 | `Mower-Gateway` | rmx-mower-gateway |
-| `Mower-Gateway-Probe` | rmx-mower-gateway-probe |
 | anything else (`Home`, `_Sidebar`, `Wiki-Policy`, `Mower-Hardware`, protocol, architecture) | blade-of-grass |
 
 ## 4. When a PR must change `wiki/`

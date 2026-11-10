@@ -1,12 +1,12 @@
 # Mower hardware
 
-How the mower's electronics split into boards. **Status: design only, not built** (decided 2026-10-22). Building the link: [rmx-mower-gateway#1](https://github.com/rmx-lt/rmx-mower-gateway/issues/1).
+How the mower's electronics split into boards. **Status: design only, not built** (decided 2026-10-22). Building the link: [rmx-mower-gateway#40](https://github.com/rmx-lt/rmx-mower-gateway/issues/40).
 
 ## Two boards
 
 | Board | Owns | Firmware repo |
 |---|---|---|
-| LilyGo T-SIM7600 (ESP32 + SIM7600G-H) | LTE, MQTT over TLS, HTTPS, the link to the server | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) (rehearsed in [rmx-mower-gateway-probe](Mower-Gateway-Probe)) |
+| LilyGo T-SIM7600 (ESP32 + SIM7600G-H) | LTE, MQTT over TLS, HTTPS, the link to the server | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) ([Mower-Gateway](Mower-Gateway)) |
 | Guition JC-ESP32P4-M3-DEV (ESP32-P4 + C6) | motors, blade, sensors, **safety** | [rmx-mower-autopilot](https://github.com/rmx-lt/rmx-mower-autopilot) |
 
 Safety lives on the P4: it stops by itself when the link to the modem board or the server's command acks are lost (see [Home](Home), architecture).

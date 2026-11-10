@@ -9,11 +9,9 @@ This wiki holds the project's knowledge. Work is planned in issues on the **[Bla
 | Part | Repo | What it is | Wiki |
 |---|---|---|---|
 | **rmx-server** | [rmx-server-infra](https://github.com/rmx-lt/rmx-server-infra) | Server infrastructure: hardened Ubuntu VPS, Docker Compose, Caddy (HTTPS, secure WebSockets), Mosquitto (MQTT over TLS) | [Server-Infra](Server-Infra) · [Server-Infra-Ansible](Server-Infra-Ansible) |
-| | [rmx-server-app-probe](https://github.com/rmx-lt/rmx-server-app-probe) | Learning / diagnostic Go service: a minimal MQTT → Postgres → HTTP/WSS stack that rehearses the backend toolchain and tests the server end to end | [Server-App-Probe](Server-App-Probe) |
-| | [rmx-server-app](https://github.com/rmx-lt/rmx-server-app) | Production app: Go backend (telemetry ingest, TimescaleDB storage, REST/WebSocket API) and React/TypeScript frontend to monitor and control the mower | [Server-App](Server-App) |
+| | [rmx-server-app](https://github.com/rmx-lt/rmx-server-app) | Go backend (MQTT ingest, TimescaleDB storage, REST/WebSocket API) and React/TypeScript frontend to monitor and control the mower; today a working rehearsal of the production stack | [Server-App](Server-App) |
 | **rmx-mower** | [rmx-mower-autopilot](https://github.com/rmx-lt/rmx-mower-autopilot) | Mower firmware on the ESP32-P4 board: sensors, motion and blade control, safety | [Mower-Autopilot](Mower-Autopilot) · [Mower-Hardware](Mower-Hardware) |
-| | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) | Comms firmware on the modem board: LTE, MQTT link to the server, link to the P4 | [Mower-Gateway](Mower-Gateway) · [Mower-Hardware](Mower-Hardware) |
-| | [rmx-mower-gateway-probe](https://github.com/rmx-lt/rmx-mower-gateway-probe) | Learning / diagnostic firmware for the mower's LTE link: ESP32 + SIM7600G-H talking MQTT over TLS and HTTPS to the backend probe | [Mower-Gateway-Probe](Mower-Gateway-Probe) · [Mower-Gateway-Probe-Knowledge](Mower-Gateway-Probe-Knowledge) |
+| | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) | Comms firmware on the modem board: ESP32 + SIM7600G-H, LTE, MQTT over TLS and HTTPS to the server, link to the P4 | [Mower-Gateway](Mower-Gateway) · [Mower-Gateway-Knowledge](Mower-Gateway-Knowledge) · [Mower-Hardware](Mower-Hardware) |
 
 What is done, next and planned: the [project board](https://github.com/orgs/rmx-lt/projects/1).
 
@@ -59,11 +57,9 @@ The component repos are cloned inside the blade-of-grass repo folder (its `.giti
 blade-of-grass/            ← meta repo
 ├── rmx-server/
 │   ├── rmx-server-infra/
-│   ├── rmx-server-app/
-│   └── rmx-server-app-probe/
+│   └── rmx-server-app/
 └── rmx-mower/
     ├── rmx-mower-gateway/
-    ├── rmx-mower-gateway-probe/
     └── rmx-mower-autopilot/
 ```
 

@@ -54,8 +54,8 @@ class DesiredTest(unittest.TestCase):
 
     def test_ci_only_for_listed_repos(self):
         self.assertIn("rmx: CI", self.names("rmx-server-infra"))
-        self.assertIn("rmx: CI", self.names("rmx-server-app-probe"))
-        self.assertNotIn("rmx: CI", self.names("rmx-server-app"))
+        self.assertIn("rmx: CI", self.names("rmx-server-app"))
+        self.assertNotIn("rmx: CI", self.names("rmx-mower-autopilot"))
 
     def test_wiki_check_targets_development_only(self):
         wc = [r for r in SHARED if r["name"] == "rmx: wiki-check"][0]
@@ -67,11 +67,11 @@ class DesiredTest(unittest.TestCase):
 
 
 class PlanTest(unittest.TestCase):
-    def want(self, repo="rmx-server-app"):
+    def want(self, repo="rmx-mower-gateway"):
         return apply.desired(repo, SHARED, CI)
 
     def test_empty_creates_two(self):
-        p = apply.plan("rmx-server-app", [], self.want())
+        p = apply.plan("rmx-mower-gateway", [], self.want())
         self.assertEqual([a for a, *_ in p], ["create", "create"])
 
     def test_empty_creates_three_with_ci(self):
@@ -79,18 +79,18 @@ class PlanTest(unittest.TestCase):
         self.assertEqual([a for a, *_ in p], ["create"] * 3)
 
     def test_in_sync_even_if_reordered(self):
-        self.assertEqual(apply.plan("rmx-server-app", synced("rmx-server-app"), self.want()), [])
+        self.assertEqual(apply.plan("rmx-mower-gateway", synced("rmx-mower-gateway"), self.want()), [])
 
     def test_changed_check_is_one_update(self):
-        cur = synced("rmx-server-app")
+        cur = synced("rmx-mower-gateway")
         cur[1]["rules"][0]["parameters"]["required_status_checks"][0]["context"] = "old"
-        p = apply.plan("rmx-server-app", cur, self.want())
+        p = apply.plan("rmx-mower-gateway", cur, self.want())
         self.assertEqual([(a, n) for a, n, *_ in p], [("update", "rmx: wiki-check")])
 
     def test_deletes_last(self):
         old = [{"id": 9, "name": "stable branches", "rules": [], "conditions": {}},
                {"id": 8, "name": "main", "rules": [], "conditions": {}}]
-        p = apply.plan("rmx-server-app", old, self.want())
+        p = apply.plan("rmx-mower-gateway", old, self.want())
         self.assertEqual([a for a, *_ in p], ["create", "create", "delete", "delete"])
         self.assertTrue(all(b is None for a, _, b, _ in p if a == "delete"))
 
@@ -98,7 +98,7 @@ class PlanTest(unittest.TestCase):
         cur = [as_github(self.want()[0], 1),
                {"id": 9, "name": "old", "rules": [], "conditions": {}}]
         cur[0]["enforcement"] = "disabled"
-        p = apply.plan("rmx-server-app", cur, self.want())
+        p = apply.plan("rmx-mower-gateway", cur, self.want())
         self.assertEqual([a for a, *_ in p], ["update", "create", "delete"])
 
 
@@ -196,8 +196,8 @@ class MainTest(unittest.TestCase):
         self.assertEqual((rc, out.strip()), (0, "blade-of-grass: in sync"))
 
     def test_wiki_change_reported(self):
-        gh = FakeGh(["rmx-server-app"], {"rmx-server-app": synced("rmx-server-app")},
-                    wiki={"rmx-server-app": True})
+        gh = FakeGh(["rmx-mower-gateway"], {"rmx-mower-gateway": synced("rmx-mower-gateway")},
+                    wiki={"rmx-mower-gateway": True})
         rc, out, _ = self.run_main(gh)
         self.assertEqual(rc, 2)
         self.assertIn("has_wiki", out)
@@ -212,15 +212,15 @@ class MainTest(unittest.TestCase):
 
     def test_apply_creates_before_deletes(self):
         old = {"id": 9, "name": "main", "rules": [], "conditions": {}}
-        gh = FakeGh(["rmx-server-app"], {"rmx-server-app": [old]})
+        gh = FakeGh(["rmx-mower-gateway"], {"rmx-mower-gateway": [old]})
         rc, _, _ = self.run_main(gh, ["--apply"])
         self.assertEqual(rc, 0)
         verbs = [c[c.index("-X") + 1] for c in gh.calls if "-X" in c]
         self.assertEqual(verbs, ["POST", "POST", "DELETE"])
 
     def test_apply_sets_wiki(self):
-        gh = FakeGh(["rmx-server-app"], {"rmx-server-app": synced("rmx-server-app")},
-                    wiki={"rmx-server-app": True})
+        gh = FakeGh(["rmx-mower-gateway"], {"rmx-mower-gateway": synced("rmx-mower-gateway")},
+                    wiki={"rmx-mower-gateway": True})
         self.run_main(gh, ["--apply"])
         edits = [c for c in gh.calls if c[:2] == ["repo", "edit"]]
         self.assertEqual(len(edits), 1)
