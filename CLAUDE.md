@@ -23,4 +23,4 @@ This repo holds the tooling for all rmx-lt repos:
 
 - Never commit or write to the wiki: passwords, tokens, private keys, IMEI/ICCID/IMSI, home IPs, personal emails or names. The wiki is public; see Wiki-Policy.
 - Branches in every rmx-lt repo: `feat/<issue#>-slug` → PR → `development` (default) → PR → `production`. Feature branches are deleted on merge; there is no `main`.
-- Merging to `production` deploys: rmx-server-infra (playbook) and rmx-server-app-probe (probe image) go to the VPS. Merging to `development` deploys nothing.
+- Merging to `production` deploys: rmx-server-infra (playbook) and rmx-server-app (backend image) go to the VPS. Merging to `development` deploys nothing.
