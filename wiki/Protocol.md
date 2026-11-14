@@ -22,6 +22,7 @@ The contract between the mower and the server: MQTT topics and payloads, command
 12. [Chunk transfer](#12-chunk-transfer)
 13. [Corrections (NTRIP)](#13-corrections-ntrip)
 14. [Board link (UART)](#14-board-link-uart)
+15. [Monitor](#15-monitor)
 
 ## 1. Roles
 
@@ -61,6 +62,7 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/autopilot/cmd/ack` | up | 1 | no | JSON ack | 5 |
 | `mower/<name>/autopilot/drive` | down | 0 | no | JSON setpoint | 9 |
 | `mower/<name>/autopilot/recording` | up | 1 | no | JSON points | 10 |
+| `mower/<name>/autopilot/monitor` | up | 0 | no | JSON samples | 15 |
 | `mower/<name>/autopilot/job/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 11, 12 |
 | `mower/<name>/autopilot/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
 
@@ -265,6 +267,8 @@ Things that happen without a command. Command results are acks, not events.
 | `job_start` | `job`, `size`, `sha256`, optional `from_point` | `idle` | yes | Downloads and runs a job (§11). Errors: `download_failed`, `bad_job`, `no_fix` |
 | `pause`, `resume` | | `job` | | Stops and continues the path; the blade is off while paused |
 | `clear_fault` | | `fault` | | Returns to `idle` |
+| `monitor_start` | `session`, `metrics`, `rate`, optional `hold` | any | | Starts or extends fast sampling (§15) |
+| `monitor_stop` | | any | | Ends it |
 | `ota` | `version`, optional `file`, `size` | `idle` | yes | Updates the autopilot firmware over `autopilot/fw/…` (§12), with rollback |
 | `restart` | | `idle`, `fault` | | |
 
@@ -412,3 +416,48 @@ Autopilot → gateway:
 | 1 | 1 | Flags: bit 0 ready (subscriptions sent) |
 
 The autopilot may set its clock from the heartbeat until the receiver gives it time. When bit 0 of the gateway's flags goes from 0 to 1 the autopilot republishes its state (§7.1) and sends what it held back (§10).
+
+## 15. Monitor
+
+Telemetry (§7.2) is once per second. For values that change fast (battery voltage and current, wheel and blade speed) the user can ask for a short, fast stream of chosen values, for example to watch a chart. It runs beside any mode and changes nothing about how the mower drives. It is never stored on the mower and never sent unless asked for.
+
+**Start.** `monitor_start` on `autopilot/cmd`:
+
+```json
+{ "id": "c-91b0", "cmd": "monitor_start", "session": "m-3", "metrics": ["battery.v", "battery.a"], "rate": 100, "hold": 10 }
+```
+
+| Field | Rule |
+|---|---|
+| `session` | Id chosen by the server, 1–64 of `[A-Za-z0-9_-]` |
+| `metrics` | 1–4 names from the table below |
+| `rate` | Samples per second: `10`, `20`, `50` or `100` |
+| `hold` | Seconds the stream runs without being extended; default 10, at most 60 |
+
+Errors: `bad_request` for an unknown metric or rate. One stream runs at a time; a `monitor_start` with a new session replaces the running one.
+
+**Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. The stream also ends on `monitor_stop` and at once when the gateway reports the server link down (§14.4). Nothing is kept back for later.
+
+**Data.** The autopilot publishes the samples on `autopilot/monitor`, QoS 0, one message every 0.2 s:
+
+```json
+{ "session": "m-3", "index": 1200, "time": 1794650012.000, "rate": 100,
+  "metrics": ["battery.v", "battery.a"],
+  "samples": [[25.31, 4.10], [25.30, 4.12], [25.30, 4.15]] }
+```
+
+- `index` is the number of the first sample in the message, counted from 0 within the session, so a lost message shows as a gap.
+- `time` is when the first sample was taken; sample `k` of the message was taken at `time + k / rate`.
+- Each sample is an array with one value per metric, in the order of `metrics`.
+
+| Metric | Value |
+|---|---|
+| `battery.v` | Battery voltage, V |
+| `battery.a` | Battery current, A |
+| `drive.left`, `drive.right` | Wheel speeds, m/s |
+| `blade.rpm` | Blade speed |
+| `speed` | Ground speed, m/s |
+
+Power is not a metric: the server multiplies voltage and current of the same sample.
+
+Four metrics at 100 Hz are about 3 KB/s, on top of telemetry and corrections; the LTE modem's serial link carries about 11 KB/s, which is why the count and the rate are limited.
