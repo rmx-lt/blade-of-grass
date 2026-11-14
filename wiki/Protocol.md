@@ -23,6 +23,7 @@ The contract between the mower and the server: MQTT topics and payloads, command
 13. [Corrections (NTRIP)](#13-corrections-ntrip)
 14. [Board link (UART)](#14-board-link-uart)
 15. [Monitor](#15-monitor)
+16. [Metrics](#16-metrics)
 
 ## 1. Roles
 
@@ -53,6 +54,7 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/gateway/state` | up | 1 | yes | JSON | 6.2 |
 | `mower/<name>/gateway/telemetry` | up | 0 | no | JSON | 6.3 |
 | `mower/<name>/gateway/monitor` | up | 0 | no | JSON samples | 15 |
+| `mower/<name>/gateway/metrics/<part>` | up | 1 | yes | JSON catalogue | 16 |
 | `mower/<name>/gateway/cmd` | down | 1 | no | JSON command | 5, 6.4 |
 | `mower/<name>/gateway/cmd/ack` | up | 1 | no | JSON ack | 5 |
 | `mower/<name>/gateway/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
@@ -64,6 +66,7 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/autopilot/drive` | down | 0 | no | JSON setpoint | 9 |
 | `mower/<name>/autopilot/recording` | up | 1 | no | JSON points | 10 |
 | `mower/<name>/autopilot/monitor` | up | 0 | no | JSON samples | 15 |
+| `mower/<name>/autopilot/metrics/<part>` | up | 1 | yes | JSON catalogue | 16 |
 | `mower/<name>/autopilot/job/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 11, 12 |
 | `mower/<name>/autopilot/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
 
@@ -77,25 +80,8 @@ The gateway publishes and subscribes the `autopilot/…` topics on the autopilot
 - **Time** is Unix time in seconds; `time` fields may carry a fraction (`1794650000.25`). `expires_at` is a whole number.
 - **Position** is latitude and longitude in degrees with 8 decimals, as the RTK receiver reports them (with LitPOS corrections that is the ETRS89 frame, a few decimetres from the WGS84 of satellite imagery). A point is the array `[lat, lon]`. Each side converts to metres internally; no local coordinate system is shared.
 - **Units:** metres, seconds, m/s, rad/s, volts, amperes, watts. Headings are degrees clockwise from true north, 0–360.
-- Only the status and state topics are retained.
-- **System metrics.** Both boards report their own load in a `system` object of the same shape, inside their telemetry (§6.3, §7.2):
-
-  ```json
-  "system": {
-    "cpu": 37, "cores": [41, 33],
-    "memory": { "total": 327680, "free": 143000, "min_free": 98000, "largest": 64000, "pct": 56 },
-    "storage": { "nvs": { "used": 212, "total": 630, "pct": 34 } },
-    "temperature": 48.5
-  }
-  ```
-
-  | Field | Meaning |
-  |---|---|
-  | `cpu`, `cores` | Processor load in percent since the previous report: overall, and per core |
-  | `memory` | Heap in bytes: size, free now, lowest free since boot, largest free block; `pct` is the share in use. A board with external RAM adds `psram` with the same fields |
-  | `storage` | One entry per data store on the board's flash, by name: `nvs` (settings; counted in entries), and any file system (counted in bytes). `pct` is the share in use |
-  | `temperature` | Chip temperature, °C; absent on a board without a usable sensor |
-- **The mower supplies finished values.** Anything computed from measurements (battery level, power) is computed on the mower and sent; the server stores and shows what it gets and holds no formulas or constants about the mower's hardware.
+- Only the status, state and metric catalogue topics are retained.
+- **The mower supplies finished values.** Anything computed from measurements (battery level, power) is computed on the mower and sent; the server stores and shows what it gets and holds no formulas or constants about the mower's hardware. Which values a board measures, their units, ranges and warning levels come from the board's own catalogue (§16), not from this page.
 
 ## 5. Commands and acks
 
@@ -157,6 +143,7 @@ Retained. Published after every connect and when a field changes.
   "partition": "ota_0",
   "autopilot_link": "up",
   "ntrip": "streaming",
+  "operator": "24601",
   "time": 1794650000
 }
 ```
@@ -167,50 +154,44 @@ Retained. Published after every connect and when a field changes.
 | `firmware`, `previous`, `partition` | Running version, the version before the last update, the running slot |
 | `autopilot_link` | `up` / `down` (heartbeat on the board link, §14.4) |
 | `ntrip` | `off` (no settings), `waiting` (no position from the autopilot yet), `connecting`, `streaming`, `error` |
+| `operator` | Network code of the mobile operator in use |
 
 ### 6.3 `gateway/telemetry`
 
-Every 60 s: the gateway's health, and how much mobile data the mower uses and for what.
+The gateway's measurements: signal, its own load, and how much mobile data the mower uses and for what. All of them are metrics from the gateway's catalogue (§16); the message has no other fields than `time` and `boot`.
 
 ```json
 {
-  "time": 1794650000, "boot": 1794563600, "uptime": 86400,
-  "rssi": -71, "operator": "24601", "link_crc_errors": 0,
-  "system": { "cpu": 37, "cores": [41, 33], "memory": { "total": 327680, "free": 143000, "min_free": 98000, "largest": 64000, "pct": 56 }, "storage": { "nvs": { "used": 212, "total": 630, "pct": 34 } } },
-  "usage": {
-    "total": { "up": 5210000, "down": 9120000 },
-    "ntrip": { "up": 41000, "down": 2816000 },
-    "mqtt": {
-      "autopilot/telemetry": { "up": 1480000 },
-      "autopilot/monitor": { "up": 912000 },
-      "autopilot/recording": { "up": 64000 },
-      "autopilot/job/req": { "up": 9000 },
-      "autopilot/job/chunk": { "down": 187000 },
-      "autopilot/drive": { "down": 310000 },
-      "gateway/telemetry": { "up": 172000 }
-    }
+  "time": 1794650000, "boot": 1794563600,
+  "metrics": {
+    "signal.rssi": -71,
+    "link.crc_errors": 0,
+    "system.cpu": 37, "system.memory.free": 143000, "system.memory.pct": 56, "system.nvs.pct": 34,
+    "usage.total.up": 5210000, "usage.total.down": 9120000,
+    "usage.ntrip.up": 41000, "usage.ntrip.down": 2816000,
+    "usage.mqtt.up.autopilot/telemetry": 1480000,
+    "usage.mqtt.up.autopilot/monitor": 912000,
+    "usage.mqtt.down.autopilot/job/chunk": 187000,
+    "usage.mqtt.down.autopilot/drive": 310000
   }
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `boot` | When the gateway started; `uptime` is seconds since then |
-| `rssi`, `operator` | Signal in dBm, network code |
-| `system` | Processor, memory and storage of the gateway board (§4) |
-| `link_crc_errors` | Board-link frames dropped since boot |
-| `usage.total` | Bytes on the LTE connection, as counted on the network interface. This is what the SIM's allowance is charged for |
-| `usage.ntrip` | The caster connection: positions sent (`up`), corrections received (`down`) |
-| `usage.mqtt` | One entry per topic, named without `mower/<name>/`. Bytes are whole MQTT packets (header, topic and payload). A direction with no traffic is left out |
+`boot` is when the gateway started. Each metric is sent at the period its catalogue entry names (60 s for most gateway metrics).
 
-Every byte passes through the gateway, so it does the counting.
+**Data usage.** Every byte passes through the gateway, so it does the counting:
+
+| Metric | Meaning |
+|---|---|
+| `usage.total.up`, `usage.total.down` | Bytes on the LTE connection, as counted on the network interface. This is what the SIM's allowance is charged for |
+| `usage.ntrip.up`, `usage.ntrip.down` | The caster connection: positions sent, corrections received |
+| `usage.mqtt.up.<topic>`, `usage.mqtt.down.<topic>` | One topic's bytes, the topic named without `mower/<name>/`. Whole MQTT packets are counted (header, topic and payload) |
 
 - "Up" is mower → network, "down" is network → mower.
+- They are counters (§16.3): bytes since boot, charted as a rate. The per-topic counters are a family (§16.2): a topic appears once it has carried data.
+- `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the app shows as "other".
+- Maps and paths are the `autopilot/job/…` topics, firmware the `…/fw/…` topics, fast charts the `…/monitor` topics.
 - For a live view finer than a minute, the same counters can be sampled on demand (§15).
-- All `usage` counters are bytes **since boot**; a new `boot` value means they started again from 0. They only grow within a boot, so a lost message loses nothing: the server keeps the last value per topic and charts the differences.
-- A message lists only the topics whose counters changed since the previous message; `total` and `ntrip` are always present.
-- `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the server shows as "other".
-- Maps and paths are the `autopilot/job/…` topics, firmware the `…/fw/…` topics, fast charts `autopilot/monitor`.
 - The gateway counts sizes only; it still does not read autopilot payloads.
 
 ### 6.4 Gateway commands
@@ -263,36 +244,39 @@ The server link is not needed to follow a path: a job continues while the gatewa
 
 ### 7.2 `autopilot/telemetry`
 
-Once per second in every mode except `idle`; every 10 s in `idle`.
+Once per second in every mode except `idle`; every 10 s in `idle`. It has two parts: a fixed core that the server needs to draw the map and run jobs, and `metrics`, the measurements from the autopilot's catalogue (§16).
 
 ```json
 {
-  "time": 1794650000.25,
+  "time": 1794650000.25, "boot": 1794563700,
   "lat": 54.68712345, "lon": 25.27965432, "alt": 112.4,
   "heading": 271.5, "speed": 0.42,
   "fix": "rtk_fixed", "sats": 24, "accuracy": 0.014, "correction_age": 1.2,
-  "battery": { "v": 25.3, "a": 4.1, "power": 103.7, "pct": 78 },
-  "drive": { "left": 0.41, "right": 0.43 },
-  "blade": { "on": true, "rpm": 2900 },
   "job": { "id": "j-2031", "point": 412 },
-  "system": { "cpu": 22, "cores": [30, 14], "memory": { "total": 524288, "free": 301000, "min_free": 280000, "largest": 190000, "pct": 43 }, "storage": { "nvs": { "used": 40, "total": 630, "pct": 6 } }, "temperature": 48.5 }
+  "metrics": {
+    "battery.v": 25.3, "battery.a": 4.1, "battery.power": 103.7, "battery.pct": 78,
+    "drive.left.speed": 0.41, "drive.right.speed": 0.43, "drive.left.rpm": 52, "drive.right.rpm": 55,
+    "blade.on": true, "blade.rpm": 2900
+  }
 }
 ```
 
+Core fields (fixed by this page):
+
 | Field | Meaning |
 |---|---|
-| `system` | Processor, memory and storage of the autopilot board (§4). Included once every 10 s, not in every message |
-| `fix` | `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` |
-| `accuracy` | Horizontal accuracy estimate, metres |
-| `correction_age` | Age of the last correction, seconds; null without corrections |
+| `boot` | When the autopilot started |
+| `lat`, `lon`, `alt` | Position (§4); altitude in metres |
 | `heading` | null when not known (standing still without a heading source) |
-| `battery.v`, `battery.a` | Measured voltage and current |
-| `battery.power` | Power in watts, computed by the autopilot |
-| `battery.pct` | Battery level, 0–100, computed by the autopilot |
-| `drive.left`, `drive.right` | Wheel speeds from the encoders, m/s |
-| `job.point` | Index of the last point reached, counted through the whole job; absent outside a job |
+| `speed` | Ground speed, m/s |
+| `fix` | `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` |
+| `sats`, `accuracy` | Satellites used; horizontal accuracy estimate, metres |
+| `correction_age` | Age of the last correction, seconds; null without corrections |
+| `job.point` | Index of the last point reached, counted through the whole job; `job` is absent outside a job |
 
 Position fields are null when `fix` is `none`.
+
+`metrics` holds whichever metrics are due in this message: each is sent at the period its catalogue entry names, so slow ones (the board's load, every 10 s) are not in every message.
 
 ### 7.3 `autopilot/event`
 
@@ -490,8 +474,8 @@ Both boards offer it, each for its own values, with the same commands and the sa
 | Field | Rule |
 |---|---|
 | `session` | Id chosen by the server, 1–64 of `[A-Za-z0-9_-]` |
-| `metrics` | One or more names from the table below |
-| `rate` | Samples per second. Autopilot: `10`, `20`, `50` or `100`. Gateway: `1`, `2`, `5` or `10` |
+| `metrics` | One or more metric names from the board's catalogue (§16) |
+| `rate` | Samples per second. It must be one of the `rates` of every metric asked for |
 | `hold` | Seconds the stream runs without being extended; default 10, at most 60 |
 
 Any number of streams run side by side, each with its own session, metrics, rate and hold. The only limit is the total: the sum of `metrics × rate` over all running streams may not exceed the board's **budget**: 400 values per second on the autopilot and 100 on the gateway in version 0.1. The ack's result reports it, so the app can show what is left:
@@ -500,7 +484,7 @@ Any number of streams run side by side, each with its own session, metrics, rate
 { "id": "c-91b0", "cmd": "monitor_start", "ok": true, "state": "done", "result": { "budget": 400, "used": 200 }, "time": 1794650012.01 }
 ```
 
-Errors: `bad_request` for an unknown metric or rate, or for a running session id with different metrics or rate (use a new session); `over_budget` when the stream does not fit, with `budget` and `used` in the message.
+Errors: `bad_request` for an unknown metric, a rate a metric does not offer, or for a running session id with different metrics or rate (use a new session); `over_budget` when the stream does not fit, with `budget` and `used` in the message.
 
 **Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. A stream also ends on `monitor_stop`, and every stream ends at once when the gateway reports the server link down (§14.4). Nothing is kept back for later.
 
@@ -516,29 +500,73 @@ Errors: `bad_request` for an unknown metric or rate, or for a running session id
 - `time` is when the first sample was taken; sample `k` of the message was taken at `time + k / rate`.
 - Each sample is an array with one value per metric, in the order of `metrics`.
 
-Autopilot metrics:
-
-| Metric | Value |
-|---|---|
-| `battery.v` | Battery voltage, V |
-| `battery.a` | Battery current, A |
-| `battery.power` | Battery power, W |
-| `battery.pct` | Battery level, 0–100 |
-| `drive.left`, `drive.right` | Wheel speeds, m/s |
-| `blade.rpm` | Blade speed |
-| `speed` | Ground speed, m/s |
-| `system.cpu`, `system.memory.free`, `system.memory.pct`, `system.temperature` | The board's load (§4) |
-
-Gateway metrics:
-
-| Metric | Value |
-|---|---|
-| `usage.total.up`, `usage.total.down` | The counters of §6.3, bytes since boot |
-| `usage.ntrip.up`, `usage.ntrip.down` | |
-| `usage.mqtt.<topic>.up`, `usage.mqtt.<topic>.down` | One topic's counter, for example `usage.mqtt.autopilot/monitor.up` |
-| `rssi` | Signal, dBm |
-| `system.cpu`, `system.memory.free`, `system.memory.pct` | The board's load (§4) |
-
-The usage metrics are the running counters, not rates: the server charts the difference between samples as bytes per second. A monitor stream is itself traffic and shows up in the counters.
+Counters (data usage) are sent as the running count, not as a rate, exactly as in telemetry. A monitor stream is itself traffic and shows up in the usage counters.
 
 The budgets exist because of bandwidth: 400 values per second are about 3 KB/s, on top of telemetry and corrections, and the LTE modem's serial link carries about 11 KB/s.
+
+## 16. Metrics
+
+What a board measures is not fixed by this page. Each board publishes a **catalogue** of its metrics; telemetry (§6.3, §7.2) and monitor streams (§15) carry values by the names in it. The server stores every metric as a time series by name, and the app builds its charts, units, ranges and warning colours from the catalogue. A new metric is a firmware change only.
+
+Fixed by this page are only the fields the server's logic needs: the telemetry core (§7.2), state (§6.2, §7.1) and events (§7.3).
+
+### 16.1 Catalogue topics
+
+`gateway/metrics/<part>` and `autopilot/metrics/<part>`, retained, QoS 1. A board publishes its catalogue after boot and again when the server link comes up. The catalogue is split into parts so that each message fits 4096 bytes; normally one part per group, where a metric's group is its name up to the first dot (`battery`, `drive`, `system`, `usage`). The server joins all parts. A board removes a part by publishing an empty retained message on its topic.
+
+```json
+{
+  "label": "Battery",
+  "metrics": [
+    { "name": "battery.v", "label": "Battery voltage", "description": "Voltage measured at the battery terminals.",
+      "unit": "V", "kind": "gauge", "type": "number", "period": 1, "rates": [10, 20, 50, 100],
+      "min": 18, "max": 29.4, "low": 21, "decimals": 2 },
+    { "name": "battery.pct", "label": "Battery level", "description": "Charge left, estimated by the autopilot.",
+      "unit": "%", "kind": "gauge", "type": "number", "period": 10, "rates": [],
+      "min": 0, "max": 100, "low": 20, "decimals": 0 }
+  ]
+}
+```
+
+`label` at the top is the display name of the part's group.
+
+### 16.2 Entry fields
+
+| Field | Required | Meaning |
+|---|---|---|
+| `name` | yes | The id used in telemetry and monitor requests. Lower-case parts joined by dots; the first part is the group. Stable: a name never changes its meaning |
+| `label` | yes | Display name, English |
+| `description` | yes | One or two sentences for a tooltip, English |
+| `unit` | yes | Unit as shown: `V`, `A`, `W`, `%`, `rpm`, `m/s`, `°C`, `B`, `dBm`; empty for none |
+| `kind` | yes | `gauge` or `counter` (§16.3) |
+| `type` | yes | `number`, `bool` or `enum` |
+| `period` | yes | Seconds between values in telemetry; `0` means the metric is not in telemetry, only in monitor streams |
+| `rates` | yes | Monitor rates the metric offers, samples per second; empty when it cannot be monitored |
+| `min`, `max` | no | Expected range, for chart axes and gauges |
+| `low`, `high` | no | Warning levels: the app marks a value below `low` or above `high`. For display only; the board raises its own events and faults (§7.3) |
+| `decimals` | no | Digits after the decimal point to show |
+| `values` | for `enum` | The names of the values, in order; the metric's value is an index into this list |
+
+**Families.** A name ending in `.*` describes a set of metrics that share everything but the last part, which is only known while running: the gateway's `usage.mqtt.up.*` covers one counter per MQTT topic (`usage.mqtt.up.autopilot/telemetry`). The last part may contain any characters but a dot. A member appears in telemetry once it has data, and the app lists the members it has seen.
+
+### 16.3 Gauges and counters
+
+- A **gauge** is a value at a moment (a voltage, a speed). It is charted as it is.
+- A **counter** only grows: it counts something since the board's boot (bytes sent, dropped frames). It is charted as its rate of change, in its unit per second. The `boot` field of the telemetry message says when counting started; a new `boot` value means every counter started again from 0. Because a counter carries the whole count, a lost message loses nothing.
+- A counter that has not changed since it was last sent may be left out of a telemetry message.
+
+### 16.4 Metrics of version 0.1 firmware
+
+For orientation only: the catalogue a board publishes is what counts.
+
+| Board | Group | Metrics |
+|---|---|---|
+| Autopilot | `battery` | `v`, `a`, `power`, `pct` |
+| Autopilot | `drive` | `left.speed`, `right.speed` (m/s), `left.rpm`, `right.rpm` |
+| Autopilot | `blade` | `on` (bool), `rpm` |
+| Gateway | `signal` | `rssi` |
+| Gateway | `link` | `crc_errors` (counter: board-link frames dropped) |
+| Gateway | `usage` | `total.up`, `total.down`, `ntrip.up`, `ntrip.down`, `mqtt.up.*`, `mqtt.down.*` (counters, bytes) |
+| Both | `system` | `cpu`, `core0`, `core1` (load, %), `memory.free`, `memory.min_free`, `memory.largest` (bytes), `memory.pct`, `nvs.pct` (settings storage in use), `temperature` (°C, where the chip has a usable sensor); the autopilot adds `psram.free` and `psram.pct` for its external RAM |
+
+These boards have no disk. Their storage is flash: the settings area (`system.nvs.pct`) today, and one more metric per file system if a board gets one.
