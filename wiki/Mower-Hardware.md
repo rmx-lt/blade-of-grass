@@ -6,14 +6,14 @@ How the mower's electronics split into boards. **Status: design only, not built*
 
 | Board | Owns | Firmware repo |
 |---|---|---|
-| LilyGo T-SIM7600 (ESP32 + SIM7600G-H) | LTE, MQTT over TLS, HTTPS, the link to the server | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) ([Mower-Gateway](Mower-Gateway)) |
-| Guition JC-ESP32P4-M3-DEV (ESP32-P4 + C6) | motors, blade, sensors, **safety** | [rmx-mower-autopilot](https://github.com/rmx-lt/rmx-mower-autopilot) |
+| LilyGo T-SIM7600 (ESP32 + SIM7600G-H) | Communications only: LTE, MQTT over TLS, the NTRIP client, the link to the server. No hardware connection to anything but the P4 | [rmx-mower-gateway](https://github.com/rmx-lt/rmx-mower-gateway) ([Mower-Gateway](Mower-Gateway)) |
+| Guition JC-ESP32P4-M3-DEV (ESP32-P4 + C6) | positioning (RTK GNSS), motors, blade, battery, **safety** | [rmx-mower-autopilot](https://github.com/rmx-lt/rmx-mower-autopilot) |
 
 Safety lives on the P4: it stops by itself when the link to the modem board or the server's command acks are lost (see [Home](Home), architecture).
 
 ## The link
 
-UART with RTS/CTS. Messages are framed with COBS + CRC-16 and encoded with nanopb.
+UART with RTS/CTS. Frames are COBS + CRC-16; the frame types and what they carry (relayed MQTT messages as JSON, the correction stream, a heartbeat) are in [Protocol](Protocol) §14.
 
 | T-SIM7600 | Signal | P4 board (JP1) |
 |---|---|---|
