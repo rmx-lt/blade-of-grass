@@ -52,7 +52,6 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/gateway/status` | up | 1 | yes | `online` / `offline` (gateway's last will) | 6.1 |
 | `mower/<name>/gateway/state` | up | 1 | yes | JSON | 6.2 |
 | `mower/<name>/gateway/telemetry` | up | 0 | no | JSON | 6.3 |
-| `mower/<name>/gateway/usage` | up | 0 | no | JSON | 6.5 |
 | `mower/<name>/gateway/cmd` | down | 1 | no | JSON command | 5, 6.4 |
 | `mower/<name>/gateway/cmd/ack` | up | 1 | no | JSON ack | 5 |
 | `mower/<name>/gateway/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
@@ -152,13 +151,46 @@ Retained. Published after every connect and when a field changes.
 
 ### 6.3 `gateway/telemetry`
 
-Every 60 s.
+Every 60 s: the gateway's health, and how much mobile data the mower uses and for what.
 
 ```json
-{ "time": 1794650000, "uptime": 86400, "rssi": -71, "operator": "24601", "heap": 143000, "link_crc_errors": 0 }
+{
+  "time": 1794650000, "boot": 1794563600, "uptime": 86400,
+  "rssi": -71, "operator": "24601", "heap": 143000, "link_crc_errors": 0,
+  "usage": {
+    "total": { "up": 5210000, "down": 9120000 },
+    "ntrip": { "up": 41000, "down": 2816000 },
+    "mqtt": {
+      "autopilot/telemetry": { "up": 1480000 },
+      "autopilot/monitor": { "up": 912000 },
+      "autopilot/recording": { "up": 64000 },
+      "autopilot/job/req": { "up": 9000 },
+      "autopilot/job/chunk": { "down": 187000 },
+      "autopilot/drive": { "down": 310000 },
+      "gateway/telemetry": { "up": 172000 }
+    }
+  }
+}
 ```
 
-`rssi` is dBm, `operator` the network code, `heap` free bytes, `link_crc_errors` dropped board-link frames since boot.
+| Field | Meaning |
+|---|---|
+| `boot` | When the gateway started; `uptime` is seconds since then |
+| `rssi`, `operator` | Signal in dBm, network code |
+| `heap` | Free memory, bytes |
+| `link_crc_errors` | Board-link frames dropped since boot |
+| `usage.total` | Bytes on the LTE connection, as counted on the network interface. This is what the SIM's allowance is charged for |
+| `usage.ntrip` | The caster connection: positions sent (`up`), corrections received (`down`) |
+| `usage.mqtt` | One entry per topic, named without `mower/<name>/`. Bytes are whole MQTT packets (header, topic and payload). A direction with no traffic is left out |
+
+Every byte passes through the gateway, so it does the counting.
+
+- "Up" is mower → network, "down" is network → mower.
+- All `usage` counters are bytes **since boot**; a new `boot` value means they started again from 0. They only grow within a boot, so a lost message loses nothing: the server keeps the last value per topic and charts the differences.
+- A message lists only the topics whose counters changed since the previous message; `total` and `ntrip` are always present.
+- `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the server shows as "other".
+- Maps and paths are the `autopilot/job/…` topics, firmware the `…/fw/…` topics, fast charts `autopilot/monitor`.
+- The gateway counts sizes only; it still does not read autopilot payloads.
 
 ### 6.4 Gateway commands
 
@@ -171,41 +203,6 @@ Every 60 s.
 | `ntrip_set` | `host`, `port`, `mountpoint`, `user`, `password` | | Stores the caster settings on the gateway (§13) |
 | `ntrip_clear` | | | Removes them; corrections stop |
 | `autopilot_reset` | | | Pulses the autopilot's reset line, if wired |
-
-### 6.5 `gateway/usage`
-
-How much mobile data the mower uses and for what. Every byte passes through the gateway, so it does the counting: per MQTT topic, for the correction stream, and in total. Published every 60 s.
-
-```json
-{
-  "time": 1794650000,
-  "boot": 1794563600,
-  "total": { "up": 5210000, "down": 9120000 },
-  "ntrip": { "up": 41000, "down": 2816000 },
-  "mqtt": {
-    "autopilot/telemetry": { "up": 1480000 },
-    "autopilot/monitor": { "up": 912000 },
-    "autopilot/recording": { "up": 64000 },
-    "autopilot/job/req": { "up": 9000 },
-    "autopilot/job/chunk": { "down": 187000 },
-    "autopilot/drive": { "down": 310000 },
-    "gateway/telemetry": { "up": 172000 }
-  }
-}
-```
-
-| Field | Meaning |
-|---|---|
-| `boot` | When the gateway started. All counters are bytes **since that boot**; a new `boot` value means they started again from 0 |
-| `total` | Everything on the LTE connection, as counted on the network interface. This is what the SIM's allowance is charged for |
-| `ntrip` | The caster connection: positions sent (`up`), corrections received (`down`) |
-| `mqtt` | One entry per topic, named without `mower/<name>/`. Bytes are whole MQTT packets (header, topic and payload). A direction with no traffic is left out |
-
-- "Up" is mower → network, "down" is network → mower.
-- A message lists only the topics whose counters changed since the previous message; `total` and `ntrip` are always present.
-- `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the server shows as "other".
-- The counters only ever grow within a boot, so a lost message loses nothing: the server keeps the last value per topic and charts the differences. Maps and paths are the `autopilot/job/…` topics, firmware the `…/fw/…` topics, fast charts `autopilot/monitor`.
-- The gateway counts sizes only; it still does not read autopilot payloads.
 
 ## 7. Autopilot state, telemetry and events
 
