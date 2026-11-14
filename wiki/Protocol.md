@@ -52,6 +52,7 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/gateway/status` | up | 1 | yes | `online` / `offline` (gateway's last will) | 6.1 |
 | `mower/<name>/gateway/state` | up | 1 | yes | JSON | 6.2 |
 | `mower/<name>/gateway/telemetry` | up | 0 | no | JSON | 6.3 |
+| `mower/<name>/gateway/monitor` | up | 0 | no | JSON samples | 15 |
 | `mower/<name>/gateway/cmd` | down | 1 | no | JSON command | 5, 6.4 |
 | `mower/<name>/gateway/cmd/ack` | up | 1 | no | JSON ack | 5 |
 | `mower/<name>/gateway/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
@@ -186,6 +187,7 @@ Every 60 s: the gateway's health, and how much mobile data the mower uses and fo
 Every byte passes through the gateway, so it does the counting.
 
 - "Up" is mower → network, "down" is network → mower.
+- For a live view finer than a minute, the same counters can be sampled on demand (§15).
 - All `usage` counters are bytes **since boot**; a new `boot` value means they started again from 0. They only grow within a boot, so a lost message loses nothing: the server keeps the last value per topic and charts the differences.
 - A message lists only the topics whose counters changed since the previous message; `total` and `ntrip` are always present.
 - `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the server shows as "other".
@@ -203,6 +205,7 @@ Every byte passes through the gateway, so it does the counting.
 | `ntrip_set` | `host`, `port`, `mountpoint`, `user`, `password` | | Stores the caster settings on the gateway (§13) |
 | `ntrip_clear` | | | Removes them; corrections stop |
 | `autopilot_reset` | | | Pulses the autopilot's reset line, if wired |
+| `monitor_start`, `monitor_stop` | as in §15 | | Fast sampling of gateway values, on demand |
 
 ## 7. Autopilot state, telemetry and events
 
@@ -451,9 +454,11 @@ The autopilot may set its clock from the heartbeat until the receiver gives it t
 
 ## 15. Monitor
 
-Telemetry (§7.2) is once per second. For values that change fast (battery voltage and current, wheel and blade speed) the user can ask for a short, fast stream of chosen values, for example to watch a chart. It runs beside any mode and changes nothing about how the mower drives. It is never stored on the mower and never sent unless asked for.
+Telemetry is once per second from the autopilot (§7.2) and once per minute from the gateway (§6.3). For values that change fast (battery voltage and current, wheel and blade speed, data usage) the user can ask for a short, fast stream of chosen values, for example to watch a chart. It runs beside any mode and changes nothing about how the mower drives. It is never stored on the mower and never sent unless asked for.
 
-**Start.** `monitor_start` on `autopilot/cmd`:
+Both boards offer it, each for its own values, with the same commands and the same message: the autopilot on `autopilot/cmd` and `autopilot/monitor`, the gateway on `gateway/cmd` and `gateway/monitor`. The two are independent, each with its own streams and budget.
+
+**Start.** `monitor_start` on the board's `cmd` topic:
 
 ```json
 { "id": "c-91b0", "cmd": "monitor_start", "session": "m-3", "metrics": ["battery.v", "battery.a"], "rate": 100, "hold": 10 }
@@ -463,10 +468,10 @@ Telemetry (§7.2) is once per second. For values that change fast (battery volta
 |---|---|
 | `session` | Id chosen by the server, 1–64 of `[A-Za-z0-9_-]` |
 | `metrics` | One or more names from the table below |
-| `rate` | Samples per second: `10`, `20`, `50` or `100` |
+| `rate` | Samples per second. Autopilot: `10`, `20`, `50` or `100`. Gateway: `1`, `2`, `5` or `10` |
 | `hold` | Seconds the stream runs without being extended; default 10, at most 60 |
 
-Any number of streams run side by side, each with its own session, metrics, rate and hold. The only limit is the total: the sum of `metrics × rate` over all running streams may not exceed the autopilot's **budget**, 400 values per second in version 0.1. The ack's result reports it, so the app can show what is left:
+Any number of streams run side by side, each with its own session, metrics, rate and hold. The only limit is the total: the sum of `metrics × rate` over all running streams may not exceed the board's **budget**: 400 values per second on the autopilot and 100 on the gateway in version 0.1. The ack's result reports it, so the app can show what is left:
 
 ```json
 { "id": "c-91b0", "cmd": "monitor_start", "ok": true, "state": "done", "result": { "budget": 400, "used": 200 }, "time": 1794650012.01 }
@@ -476,7 +481,7 @@ Errors: `bad_request` for an unknown metric or rate, or for a running session id
 
 **Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. A stream also ends on `monitor_stop`, and every stream ends at once when the gateway reports the server link down (§14.4). Nothing is kept back for later.
 
-**Data.** The autopilot publishes each stream's samples on `autopilot/monitor`, QoS 0, one message per stream every 0.2 s:
+**Data.** The board publishes each stream's samples on its `monitor` topic, QoS 0, one message per stream every 0.2 s (the gateway: every second):
 
 ```json
 { "session": "m-3", "index": 1200, "time": 1794650012.000, "rate": 100,
@@ -488,6 +493,8 @@ Errors: `bad_request` for an unknown metric or rate, or for a running session id
 - `time` is when the first sample was taken; sample `k` of the message was taken at `time + k / rate`.
 - Each sample is an array with one value per metric, in the order of `metrics`.
 
+Autopilot metrics:
+
 | Metric | Value |
 |---|---|
 | `battery.v` | Battery voltage, V |
@@ -498,4 +505,15 @@ Errors: `bad_request` for an unknown metric or rate, or for a running session id
 
 Power is not a metric: the server multiplies voltage and current of the same sample.
 
-The budget exists because of bandwidth: 400 values per second are about 3 KB/s, on top of telemetry and corrections, and the LTE modem's serial link carries about 11 KB/s.
+Gateway metrics:
+
+| Metric | Value |
+|---|---|
+| `usage.total.up`, `usage.total.down` | The counters of §6.3, bytes since boot |
+| `usage.ntrip.up`, `usage.ntrip.down` | |
+| `usage.mqtt.<topic>.up`, `usage.mqtt.<topic>.down` | One topic's counter, for example `usage.mqtt.autopilot/monitor.up` |
+| `rssi` | Signal, dBm |
+
+The usage metrics are the running counters, not rates: the server charts the difference between samples as bytes per second. A monitor stream is itself traffic and shows up in the counters.
+
+The budgets exist because of bandwidth: 400 values per second are about 3 KB/s, on top of telemetry and corrections, and the LTE modem's serial link carries about 11 KB/s.
