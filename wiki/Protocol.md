@@ -250,7 +250,7 @@ Every value the autopilot measures or computes, position included, is a metric f
 {
   "time": 1794650000.25, "boot": 1794563700,
   "metrics": {
-    "position.lat": 54.68712345, "position.lon": 25.27965432, "position.alt": 112.4,
+    "position.lat": 54.68712345, "position.lon": 25.27965432,
     "position.heading": 271.5, "position.speed": 0.42,
     "gnss.fix": 4, "gnss.sats": 24, "gnss.accuracy": 0.014, "gnss.correction_age": 1.2,
     "job.point": 412,
@@ -266,7 +266,7 @@ Every value the autopilot measures or computes, position included, is a metric f
 - In `idle` the autopilot sends no metric more often than every 10 s.
 - A value that is not known is `null` (the position without a fix, `job.point` outside a job).
 
-The server needs some of these metrics to draw the map and run jobs. Their names and meanings are fixed by this page (§16.4); everything else is the board's choice.
+The server needs a few values to draw the map, run jobs and fill the app's fixed indicators. It asks for them by **key** (§16.4), and the catalogue says which metric answers each key; the metric names themselves are the board's choice.
 
 ### 7.3 `autopilot/event`
 
@@ -350,7 +350,7 @@ A job is a path planned by the server: segments of points, each with the blade o
 
 1. The server sends `job_start` with the job id, the file's `size` in bytes and its `sha256` (64 hex characters).
 2. The autopilot acks `accepted` and downloads the file over `autopilot/job/…` (§12), asking for the file named by the job id.
-3. It checks the size and hash, then follows the segments in order. State shows `mode: "job"` and the job id; telemetry shows the metric `job.point`.
+3. It checks the size and hash, then follows the segments in order. State shows `mode: "job"` and the job id; telemetry shows the metric linked to the key `job.point` (§16.4).
 4. The final ack is `done` with `{"points": <count>}`, or a failure. After a failure or a `stop`, the server can send `job_start` again with `from_point` to continue.
 
 The job file is JSON, at most 1 MiB:
@@ -498,10 +498,7 @@ The budgets exist because of bandwidth: 400 values per second are about 3 KB/s, 
 
 What a board measures is not fixed by this page. Each board publishes a **catalogue** of its metrics; telemetry (§6.3, §7.2) and monitor streams (§15) carry values by the names in it. The server stores every metric as a time series by name, and the app builds its charts, units, ranges and warning colours from the catalogue. A new metric is a firmware change only.
 
-Every measured or computed value is a metric, and every metric is in the catalogue. They differ only in purpose:
-
-- **Required metrics** (§16.4) have a name and meaning fixed by this page, because the server acts on them: it draws the mower from `position.lat` and `position.lon`. A board must publish them, and describes them in its catalogue like any other, so they can be charted and monitored too.
-- **Free metrics** are the board's choice. The server only stores and shows them.
+Every measured or computed value is a metric, and every metric is in the catalogue. What the server itself depends on is a short list of **keys** (§16.4): the server's side of the interface. A catalogue entry may name the key its metric answers. A metric without a key is only stored and shown.
 
 State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not metrics: they are not measurements over time but facts that must arrive, so they keep their own messages with guaranteed delivery.
 
@@ -516,7 +513,7 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
     { "name": "battery.v", "label": "Battery voltage", "description": "Voltage measured at the battery terminals.",
       "unit": "V", "kind": "gauge", "type": "number", "period": 1, "rates": [10, 20, 50, 100],
       "min": 18, "max": 29.4, "low": 21, "decimals": 2 },
-    { "name": "battery.pct", "label": "Battery level", "description": "Charge left, estimated by the autopilot.",
+    { "name": "battery.pct", "key": "battery.level", "label": "Battery level", "description": "Charge left, estimated by the autopilot.",
       "unit": "%", "kind": "gauge", "type": "number", "period": 10, "rates": [],
       "min": 0, "max": 100, "low": 20, "decimals": 0 }
   ]
@@ -530,6 +527,7 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 | Field | Required | Meaning |
 |---|---|---|
 | `name` | yes | The id used in telemetry and monitor requests. Lower-case parts joined by dots; the first part is the group. Stable: a name never changes its meaning |
+| `key` | no | The server key this metric answers (§16.4) |
 | `label` | yes | Display name, English |
 | `description` | yes | One or two sentences for a tooltip, English |
 | `unit` | yes | Unit as shown: `V`, `A`, `W`, `%`, `rpm`, `m/s`, `°C`, `B`, `dBm`; empty for none |
@@ -541,7 +539,6 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 | `low`, `high` | no | Warning levels: the app marks a value below `low` or above `high`. For display only; the board raises its own events and faults (§7.3) |
 | `decimals` | no | Digits after the decimal point to show |
 | `values` | for `enum` | The names of the values, in order; the metric's value is an index into this list, from 0 |
-| `required` | no | `true` on the metrics of §16.4 |
 
 **Families.** A name ending in `.*` describes a set of metrics that share everything but the last part, which is only known while running: the gateway's `usage.mqtt.up.*` covers one counter per MQTT topic (`usage.mqtt.up.autopilot/telemetry`). The last part may contain any characters but a dot. A member appears in telemetry once it has data, and the app lists the members it has seen.
 
@@ -551,36 +548,64 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 - A **counter** only grows: it counts something since the board's boot (bytes sent, dropped frames). It is charted as its rate of change, in its unit per second. The `boot` field of the telemetry message says when counting started; a new `boot` value means every counter started again from 0. Because a counter carries the whole count, a lost message loses nothing.
 - A counter that has not changed since it was last sent may be left out of a telemetry message.
 
-### 16.4 Required metrics
+### 16.4 Keys
 
-The autopilot must publish these, with these names, types and units. The catalogue entry adds the rest (label, period, rates, range).
+The list of values the server and the app use by themselves. It is the interface a mower has to satisfy: for every key, one metric of the mower names it in its catalogue entry (`key`). The list is kept short; a key is added only when the server or the app starts to depend on a value.
 
-| Metric | Type, unit | Meaning | Used by the server for |
-|---|---|---|---|
-| `position.lat`, `position.lon` | number, degrees | Position (§4) | The mower on the map |
-| `position.alt` | number, m | Altitude | |
-| `position.heading` | number, degrees | Heading (§4); null when not known (standing still without a heading source) | The mower's direction on the map |
-| `position.speed` | number, m/s | Ground speed | |
-| `gnss.fix` | enum: `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` (values 0–4) | Quality of the position | Whether the position can be trusted |
-| `gnss.sats` | number | Satellites used | |
-| `gnss.accuracy` | number, m | Horizontal accuracy estimate | |
-| `gnss.correction_age` | number, s | Age of the last correction; null without corrections | |
-| `job.point` | number | Index of the last point reached, counted through the whole job; null outside a job. The job itself is named in state (§7.1) | Job progress, and where to resume |
-
-The gateway has no required metrics.
-
-### 16.5 Free metrics of version 0.1 firmware
-
-For orientation only: the catalogue a board publishes is what counts.
-
-| Board | Group | Metrics |
+| Key | Type, unit | The server or app uses it for |
 |---|---|---|
-| Autopilot | `battery` | `v`, `a`, `power`, `pct` |
-| Autopilot | `drive` | `left.speed`, `right.speed` (m/s), `left.rpm`, `right.rpm` |
-| Autopilot | `blade` | `on` (bool), `rpm` |
-| Gateway | `signal` | `rssi` |
-| Gateway | `link` | `crc_errors` (counter: board-link frames dropped) |
-| Gateway | `usage` | `total.up`, `total.down`, `ntrip.up`, `ntrip.down`, `mqtt.up.*`, `mqtt.down.*` (counters, bytes) |
-| Both | `system` | `cpu`, `core0`, `core1` (load, %), `memory.free`, `memory.min_free`, `memory.largest` (bytes), `memory.pct`, `nvs.pct` (settings storage in use), `temperature` (°C, where the chip has a usable sensor); the autopilot adds `psram.free` and `psram.pct` for its external RAM |
+| `position.lat` | number, degrees | The mower on the map (§4) |
+| `position.lon` | number, degrees | The mower on the map (§4) |
+| `position.heading` | number, degrees | The mower's direction on the map; null when not known (standing still without a heading source) |
+| `gnss.fix` | enum: `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` (values 0–4) | Whether the position can be trusted |
+| `job.point` | number | Job progress and where to resume: the index of the last point reached, counted through the whole job; null outside a job. The job itself is named in state (§7.1) |
+| `battery.level` | number, % | The battery indicator |
+| `blade.on` | bool | The blade indicator |
+| `signal.strength` | number, dBm | The signal indicator |
+
+Rules:
+
+- A key is linked by exactly one metric of the mower, on either board.
+- The metric has the key's type and unit; the server converts nothing. For an enum key, the metric's `values` are the key's values in the same order.
+- Metrics whose keys belong together (`position.lat`, `position.lon`, `position.heading`, `gnss.fix`) have the same period and come from the same measurement.
+- The server reads the links from the catalogue. A key that no metric links is reported in the app, and what depends on it is not shown.
+
+### 16.5 Metrics of version 0.1 firmware
+
+For orientation: the catalogue a board publishes is what counts. Ranges, warning levels and decimals are set in the firmware. Period is seconds between values in telemetry; rates are samples per second on demand (§15).
+
+| Board | Name | Key | Type | Unit | Kind | Period | Monitor rates |
+|---|---|---|---|---|---|---|---|
+| Autopilot | `position.lat` | `position.lat` | number | degrees | gauge | 1 | 10 |
+| Autopilot | `position.lon` | `position.lon` | number | degrees | gauge | 1 | 10 |
+| Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 |
+| Autopilot | `position.speed` | | number | m/s | gauge | 1 | 10 |
+| Autopilot | `gnss.fix` | `gnss.fix` | enum | | gauge | 1 | 10 |
+| Autopilot | `gnss.sats` | | number | | gauge | 1 | |
+| Autopilot | `gnss.accuracy` | | number | m | gauge | 1 | 10 |
+| Autopilot | `gnss.correction_age` | | number | s | gauge | 1 | |
+| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | |
+| Autopilot | `battery.v` | | number | V | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `battery.a` | | number | A | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `battery.power` | | number | W | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `battery.pct` | `battery.level` | number | % | gauge | 10 | |
+| Autopilot | `drive.left.speed`, `drive.right.speed` | | number | m/s | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `drive.left.rpm`, `drive.right.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `blade.on` | `blade.on` | bool | | gauge | 1 | |
+| Autopilot | `blade.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 |
+| Autopilot | `system.psram.free` | | number | B | gauge | 10 | 10 |
+| Autopilot | `system.psram.pct` | | number | % | gauge | 10 | 10 |
+| Gateway | `signal.rssi` | `signal.strength` | number | dBm | gauge | 60 | 1, 2, 5, 10 |
+| Gateway | `link.crc_errors` | | number | frames | counter | 60 | |
+| Gateway | `usage.total.up`, `usage.total.down` | | number | B | counter | 60 | 1, 2, 5, 10 |
+| Gateway | `usage.ntrip.up`, `usage.ntrip.down` | | number | B | counter | 60 | 1, 2, 5, 10 |
+| Gateway | `usage.mqtt.up.*`, `usage.mqtt.down.*` | | number | B | counter | 60 | 1, 2, 5, 10 |
+| Both | `system.cpu`, `system.core0`, `system.core1` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
+| Both | `system.memory.free`, `system.memory.min_free`, `system.memory.largest` | | number | B | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
+| Both | `system.memory.pct` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
+| Both | `system.nvs.pct` | | number | % | gauge | 10 / 60 | |
+| Both | `system.temperature` | | number | °C | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
+
+Where a row is for both boards, the first period and rates are the autopilot's, the second the gateway's. `system.temperature` exists only where the chip has a usable sensor.
 
 These boards have no disk. Their storage is flash: the settings area (`system.nvs.pct`) today, and one more metric per file system if a board gets one.
