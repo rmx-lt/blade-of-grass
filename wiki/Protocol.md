@@ -76,8 +76,9 @@ The gateway publishes and subscribes the `autopilot/…` topics on the autopilot
 - JSON payloads are one UTF-8 object, at most **4096 bytes**. Unknown fields are ignored.
 - **Time** is Unix time in seconds; `time` fields may carry a fraction (`1794650000.25`). `expires_at` is a whole number.
 - **Position** is latitude and longitude in degrees with 8 decimals, as the RTK receiver reports them (with LitPOS corrections that is the ETRS89 frame, a few decimetres from the WGS84 of satellite imagery). A point is the array `[lat, lon]`. Each side converts to metres internally; no local coordinate system is shared.
-- **Units:** metres, seconds, m/s, rad/s, volts, amperes. Headings are degrees clockwise from true north, 0–360.
+- **Units:** metres, seconds, m/s, rad/s, volts, amperes, watts. Headings are degrees clockwise from true north, 0–360.
 - Only the status and state topics are retained.
+- **The mower supplies finished values.** Anything computed from measurements (battery level, power) is computed on the mower and sent; the server stores and shows what it gets and holds no formulas or constants about the mower's hardware.
 
 ## 5. Commands and acks
 
@@ -252,7 +253,7 @@ Once per second in every mode except `idle`; every 10 s in `idle`.
   "lat": 54.68712345, "lon": 25.27965432, "alt": 112.4,
   "heading": 271.5, "speed": 0.42,
   "fix": "rtk_fixed", "sats": 24, "accuracy": 0.014, "correction_age": 1.2,
-  "battery": { "v": 25.3, "a": 4.1, "pct": 78 },
+  "battery": { "v": 25.3, "a": 4.1, "power": 103.7, "pct": 78 },
   "drive": { "left": 0.41, "right": 0.43 },
   "blade": { "on": true, "rpm": 2900 },
   "job": { "id": "j-2031", "point": 412 }
@@ -265,7 +266,9 @@ Once per second in every mode except `idle`; every 10 s in `idle`.
 | `accuracy` | Horizontal accuracy estimate, metres |
 | `correction_age` | Age of the last correction, seconds; null without corrections |
 | `heading` | null when not known (standing still without a heading source) |
-| `battery.pct` | Optional estimate; the server computes power from `v` and `a` |
+| `battery.v`, `battery.a` | Measured voltage and current |
+| `battery.power` | Power in watts, computed by the autopilot |
+| `battery.pct` | Battery level, 0–100, computed by the autopilot |
 | `drive.left`, `drive.right` | Wheel speeds from the encoders, m/s |
 | `job.point` | Index of the last point reached, counted through the whole job; absent outside a job |
 
@@ -499,11 +502,11 @@ Autopilot metrics:
 |---|---|
 | `battery.v` | Battery voltage, V |
 | `battery.a` | Battery current, A |
+| `battery.power` | Battery power, W |
+| `battery.pct` | Battery level, 0–100 |
 | `drive.left`, `drive.right` | Wheel speeds, m/s |
 | `blade.rpm` | Blade speed |
 | `speed` | Ground speed, m/s |
-
-Power is not a metric: the server multiplies voltage and current of the same sample.
 
 Gateway metrics:
 
