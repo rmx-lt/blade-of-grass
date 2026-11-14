@@ -78,6 +78,23 @@ The gateway publishes and subscribes the `autopilot/…` topics on the autopilot
 - **Position** is latitude and longitude in degrees with 8 decimals, as the RTK receiver reports them (with LitPOS corrections that is the ETRS89 frame, a few decimetres from the WGS84 of satellite imagery). A point is the array `[lat, lon]`. Each side converts to metres internally; no local coordinate system is shared.
 - **Units:** metres, seconds, m/s, rad/s, volts, amperes, watts. Headings are degrees clockwise from true north, 0–360.
 - Only the status and state topics are retained.
+- **System metrics.** Both boards report their own load in a `system` object of the same shape, inside their telemetry (§6.3, §7.2):
+
+  ```json
+  "system": {
+    "cpu": 37, "cores": [41, 33],
+    "memory": { "total": 327680, "free": 143000, "min_free": 98000, "largest": 64000, "pct": 56 },
+    "storage": { "nvs": { "used": 212, "total": 630, "pct": 34 } },
+    "temperature": 48.5
+  }
+  ```
+
+  | Field | Meaning |
+  |---|---|
+  | `cpu`, `cores` | Processor load in percent since the previous report: overall, and per core |
+  | `memory` | Heap in bytes: size, free now, lowest free since boot, largest free block; `pct` is the share in use. A board with external RAM adds `psram` with the same fields |
+  | `storage` | One entry per data store on the board's flash, by name: `nvs` (settings; counted in entries), and any file system (counted in bytes). `pct` is the share in use |
+  | `temperature` | Chip temperature, °C; absent on a board without a usable sensor |
 - **The mower supplies finished values.** Anything computed from measurements (battery level, power) is computed on the mower and sent; the server stores and shows what it gets and holds no formulas or constants about the mower's hardware.
 
 ## 5. Commands and acks
@@ -158,7 +175,8 @@ Every 60 s: the gateway's health, and how much mobile data the mower uses and fo
 ```json
 {
   "time": 1794650000, "boot": 1794563600, "uptime": 86400,
-  "rssi": -71, "operator": "24601", "heap": 143000, "link_crc_errors": 0,
+  "rssi": -71, "operator": "24601", "link_crc_errors": 0,
+  "system": { "cpu": 37, "cores": [41, 33], "memory": { "total": 327680, "free": 143000, "min_free": 98000, "largest": 64000, "pct": 56 }, "storage": { "nvs": { "used": 212, "total": 630, "pct": 34 } } },
   "usage": {
     "total": { "up": 5210000, "down": 9120000 },
     "ntrip": { "up": 41000, "down": 2816000 },
@@ -179,7 +197,7 @@ Every 60 s: the gateway's health, and how much mobile data the mower uses and fo
 |---|---|
 | `boot` | When the gateway started; `uptime` is seconds since then |
 | `rssi`, `operator` | Signal in dBm, network code |
-| `heap` | Free memory, bytes |
+| `system` | Processor, memory and storage of the gateway board (§4) |
 | `link_crc_errors` | Board-link frames dropped since boot |
 | `usage.total` | Bytes on the LTE connection, as counted on the network interface. This is what the SIM's allowance is charged for |
 | `usage.ntrip` | The caster connection: positions sent (`up`), corrections received (`down`) |
@@ -256,12 +274,14 @@ Once per second in every mode except `idle`; every 10 s in `idle`.
   "battery": { "v": 25.3, "a": 4.1, "power": 103.7, "pct": 78 },
   "drive": { "left": 0.41, "right": 0.43 },
   "blade": { "on": true, "rpm": 2900 },
-  "job": { "id": "j-2031", "point": 412 }
+  "job": { "id": "j-2031", "point": 412 },
+  "system": { "cpu": 22, "cores": [30, 14], "memory": { "total": 524288, "free": 301000, "min_free": 280000, "largest": 190000, "pct": 43 }, "storage": { "nvs": { "used": 40, "total": 630, "pct": 6 } }, "temperature": 48.5 }
 }
 ```
 
 | Field | Meaning |
 |---|---|
+| `system` | Processor, memory and storage of the autopilot board (§4). Included once every 10 s, not in every message |
 | `fix` | `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` |
 | `accuracy` | Horizontal accuracy estimate, metres |
 | `correction_age` | Age of the last correction, seconds; null without corrections |
@@ -507,6 +527,7 @@ Autopilot metrics:
 | `drive.left`, `drive.right` | Wheel speeds, m/s |
 | `blade.rpm` | Blade speed |
 | `speed` | Ground speed, m/s |
+| `system.cpu`, `system.memory.free`, `system.memory.pct`, `system.temperature` | The board's load (§4) |
 
 Gateway metrics:
 
@@ -516,6 +537,7 @@ Gateway metrics:
 | `usage.ntrip.up`, `usage.ntrip.down` | |
 | `usage.mqtt.<topic>.up`, `usage.mqtt.<topic>.down` | One topic's counter, for example `usage.mqtt.autopilot/monitor.up` |
 | `rssi` | Signal, dBm |
+| `system.cpu`, `system.memory.free`, `system.memory.pct` | The board's load (§4) |
 
 The usage metrics are the running counters, not rates: the server charts the difference between samples as bytes per second. A monitor stream is itself traffic and shows up in the counters.
 
