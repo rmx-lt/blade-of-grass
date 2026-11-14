@@ -268,7 +268,7 @@ Things that happen without a command. Command results are acks, not events.
 | `pause`, `resume` | | `job` | | Stops and continues the path; the blade is off while paused |
 | `clear_fault` | | `fault` | | Returns to `idle` |
 | `monitor_start` | `session`, `metrics`, `rate`, optional `hold` | any | | Starts or extends fast sampling (§15) |
-| `monitor_stop` | | any | | Ends it |
+| `monitor_stop` | optional `session` | any | | Ends that stream, or every stream when `session` is absent |
 | `ota` | `version`, optional `file`, `size` | `idle` | yes | Updates the autopilot firmware over `autopilot/fw/…` (§12), with rollback |
 | `restart` | | `idle`, `fault` | | |
 
@@ -430,15 +430,21 @@ Telemetry (§7.2) is once per second. For values that change fast (battery volta
 | Field | Rule |
 |---|---|
 | `session` | Id chosen by the server, 1–64 of `[A-Za-z0-9_-]` |
-| `metrics` | 1–4 names from the table below |
+| `metrics` | One or more names from the table below |
 | `rate` | Samples per second: `10`, `20`, `50` or `100` |
 | `hold` | Seconds the stream runs without being extended; default 10, at most 60 |
 
-Errors: `bad_request` for an unknown metric or rate. One stream runs at a time; a `monitor_start` with a new session replaces the running one.
+Any number of streams run side by side, each with its own session, metrics, rate and hold. The only limit is the total: the sum of `metrics × rate` over all running streams may not exceed the autopilot's **budget**, 400 values per second in version 0.1. The ack's result reports it, so the app can show what is left:
 
-**Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. The stream also ends on `monitor_stop` and at once when the gateway reports the server link down (§14.4). Nothing is kept back for later.
+```json
+{ "id": "c-91b0", "cmd": "monitor_start", "ok": true, "state": "done", "result": { "budget": 400, "used": 200 }, "time": 1794650012.01 }
+```
 
-**Data.** The autopilot publishes the samples on `autopilot/monitor`, QoS 0, one message every 0.2 s:
+Errors: `bad_request` for an unknown metric or rate, or for a running session id with different metrics or rate (use a new session); `over_budget` when the stream does not fit, with `budget` and `used` in the message.
+
+**Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. A stream also ends on `monitor_stop`, and every stream ends at once when the gateway reports the server link down (§14.4). Nothing is kept back for later.
+
+**Data.** The autopilot publishes each stream's samples on `autopilot/monitor`, QoS 0, one message per stream every 0.2 s:
 
 ```json
 { "session": "m-3", "index": 1200, "time": 1794650012.000, "rate": 100,
@@ -460,4 +466,4 @@ Errors: `bad_request` for an unknown metric or rate. One stream runs at a time; 
 
 Power is not a metric: the server multiplies voltage and current of the same sample.
 
-Four metrics at 100 Hz are about 3 KB/s, on top of telemetry and corrections; the LTE modem's serial link carries about 11 KB/s, which is why the count and the rate are limited.
+The budget exists because of bandwidth: 400 values per second are about 3 KB/s, on top of telemetry and corrections, and the LTE modem's serial link carries about 11 KB/s.
