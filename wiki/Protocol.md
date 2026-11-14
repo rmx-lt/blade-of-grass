@@ -579,20 +579,20 @@ For orientation: the catalogue a board publishes is what counts. Ranges, warning
 |---|---|---|---|---|---|---|---|---|
 | Autopilot | `position.lat` | `position.lat` | number | degrees | gauge | 1 | 10 | no |
 | Autopilot | `position.lon` | `position.lon` | number | degrees | gauge | 1 | 10 | no |
-| Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 | yes |
+| Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 | no |
 | Autopilot | `position.speed` | | number | m/s | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.fix` | `gnss.fix` | enum | | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.sats` | | number | | gauge | 1 | | yes |
 | Autopilot | `gnss.accuracy` | | number | m | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.correction_age` | | number | s | gauge | 1 | | yes |
-| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | | yes |
+| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | | no |
 | Autopilot | `battery.v` | | number | V | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `battery.a` | | number | A | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `battery.power` | | number | W | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `battery.pct` | `battery.level` | number | % | gauge | 10 | | yes |
 | Autopilot | `drive.left.speed`, `drive.right.speed` | | number | m/s | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `drive.left.rpm`, `drive.right.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 | yes |
-| Autopilot | `blade.on` | `blade.on` | bool | | gauge | 1 | | yes |
+| Autopilot | `blade.on` | `blade.on` | bool | | gauge | 1 | | no |
 | Autopilot | `blade.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `system.psram.free` | | number | B | gauge | 10 | 10 | yes |
 | Autopilot | `system.psram.pct` | | number | % | gauge | 10 | 10 | yes |
