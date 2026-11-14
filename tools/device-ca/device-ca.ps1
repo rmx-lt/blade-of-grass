@@ -54,7 +54,7 @@ $ErrorActionPreference = 'Stop'
 $RootCn = 'RMX Device Root CA'
 $IssuingCn = 'RMX Device Issuing CA'
 $CnPattern = '^[A-Za-z0-9_-]{1,32}$'
-$ReservedCns = @('app', 'probe-app', 'events', 'status')
+$ReservedCns = @('app', 'events', 'status')
 
 function Write-Err([string]$Message) {
     [Console]::Error.WriteLine($Message)
@@ -310,9 +310,9 @@ function Assert-DeviceCsr([string]$CsrPath) {
         exit 2
     }
     # The broker uses the CN as the username (use_identity_as_username), so a
-    # CN equal to a server login would get that login's ACL (app, probe-app:
-    # all of mower/#), and events/status would collide with the shared topics
-    # mower/events/# and mower/status/server (wiki Device-CA).
+    # CN equal to the server login `app` would get its ACL (all of mower/#),
+    # and status/events would collide with the shared topic mower/status/server
+    # and the removed mower/events/# name (wiki Device-CA).
     if ($ReservedCns -contains $cn.ToLowerInvariant()) {
         Write-Err "Refusing CSR: CN '$cn' is reserved (server login or shared topic name)."
         exit 2
