@@ -538,6 +538,7 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 | `min`, `max` | no | Expected range, for chart axes and gauges |
 | `low`, `high` | no | Warning levels: the app marks a value below `low` or above `high`. For display only; the board raises its own events and faults (§7.3) |
 | `decimals` | no | Digits after the decimal point to show |
+| `chart` | no | `false` keeps the metric out of the app's chart picker (a latitude is not something to chart). Default `true`. It limits nothing else: the metric is still sent, stored and usable through its key |
 | `values` | for `enum` | The names of the values, in order; the metric's value is an index into this list, from 0 |
 
 **Families.** A name ending in `.*` describes a set of metrics that share everything but the last part, which is only known while running: the gateway's `usage.mqtt.up.*` covers one counter per MQTT topic (`usage.mqtt.up.autopilot/telemetry`). The last part may contain any characters but a dot. A member appears in telemetry once it has data, and the app lists the members it has seen.
@@ -572,39 +573,39 @@ Rules:
 
 ### 16.5 Metrics of version 0.1 firmware
 
-For orientation: the catalogue a board publishes is what counts. Ranges, warning levels and decimals are set in the firmware. Period is seconds between values in telemetry; rates are samples per second on demand (§15).
+For orientation: the catalogue a board publishes is what counts. Ranges, warning levels and decimals are set in the firmware. Period is seconds between values in telemetry; rates are samples per second on demand (§15); chart says whether the app offers the metric in its chart picker.
 
-| Board | Name | Key | Type | Unit | Kind | Period | Monitor rates |
-|---|---|---|---|---|---|---|---|
-| Autopilot | `position.lat` | `position.lat` | number | degrees | gauge | 1 | 10 |
-| Autopilot | `position.lon` | `position.lon` | number | degrees | gauge | 1 | 10 |
-| Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 |
-| Autopilot | `position.speed` | | number | m/s | gauge | 1 | 10 |
-| Autopilot | `gnss.fix` | `gnss.fix` | enum | | gauge | 1 | 10 |
-| Autopilot | `gnss.sats` | | number | | gauge | 1 | |
-| Autopilot | `gnss.accuracy` | | number | m | gauge | 1 | 10 |
-| Autopilot | `gnss.correction_age` | | number | s | gauge | 1 | |
-| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | |
-| Autopilot | `battery.v` | | number | V | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `battery.a` | | number | A | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `battery.power` | | number | W | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `battery.pct` | `battery.level` | number | % | gauge | 10 | |
-| Autopilot | `drive.left.speed`, `drive.right.speed` | | number | m/s | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `drive.left.rpm`, `drive.right.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `blade.on` | `blade.on` | bool | | gauge | 1 | |
-| Autopilot | `blade.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 |
-| Autopilot | `system.psram.free` | | number | B | gauge | 10 | 10 |
-| Autopilot | `system.psram.pct` | | number | % | gauge | 10 | 10 |
-| Gateway | `signal.rssi` | `signal.strength` | number | dBm | gauge | 60 | 1, 2, 5, 10 |
-| Gateway | `link.crc_errors` | | number | frames | counter | 60 | |
-| Gateway | `usage.total.up`, `usage.total.down` | | number | B | counter | 60 | 1, 2, 5, 10 |
-| Gateway | `usage.ntrip.up`, `usage.ntrip.down` | | number | B | counter | 60 | 1, 2, 5, 10 |
-| Gateway | `usage.mqtt.up.*`, `usage.mqtt.down.*` | | number | B | counter | 60 | 1, 2, 5, 10 |
-| Both | `system.cpu`, `system.core0`, `system.core1` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
-| Both | `system.memory.free`, `system.memory.min_free`, `system.memory.largest` | | number | B | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
-| Both | `system.memory.pct` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
-| Both | `system.nvs.pct` | | number | % | gauge | 10 / 60 | |
-| Both | `system.temperature` | | number | °C | gauge | 10 / 60 | 10 / 1, 2, 5, 10 |
+| Board | Name | Key | Type | Unit | Kind | Period | Monitor rates | Chart |
+|---|---|---|---|---|---|---|---|---|
+| Autopilot | `position.lat` | `position.lat` | number | degrees | gauge | 1 | 10 | no |
+| Autopilot | `position.lon` | `position.lon` | number | degrees | gauge | 1 | 10 | no |
+| Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 | yes |
+| Autopilot | `position.speed` | | number | m/s | gauge | 1 | 10 | yes |
+| Autopilot | `gnss.fix` | `gnss.fix` | enum | | gauge | 1 | 10 | yes |
+| Autopilot | `gnss.sats` | | number | | gauge | 1 | | yes |
+| Autopilot | `gnss.accuracy` | | number | m | gauge | 1 | 10 | yes |
+| Autopilot | `gnss.correction_age` | | number | s | gauge | 1 | | yes |
+| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | | yes |
+| Autopilot | `battery.v` | | number | V | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `battery.a` | | number | A | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `battery.power` | | number | W | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `battery.pct` | `battery.level` | number | % | gauge | 10 | | yes |
+| Autopilot | `drive.left.speed`, `drive.right.speed` | | number | m/s | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `drive.left.rpm`, `drive.right.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `blade.on` | `blade.on` | bool | | gauge | 1 | | yes |
+| Autopilot | `blade.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 | yes |
+| Autopilot | `system.psram.free` | | number | B | gauge | 10 | 10 | yes |
+| Autopilot | `system.psram.pct` | | number | % | gauge | 10 | 10 | yes |
+| Gateway | `signal.rssi` | `signal.strength` | number | dBm | gauge | 60 | 1, 2, 5, 10 | yes |
+| Gateway | `link.crc_errors` | | number | frames | counter | 60 | | yes |
+| Gateway | `usage.total.up`, `usage.total.down` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
+| Gateway | `usage.ntrip.up`, `usage.ntrip.down` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
+| Gateway | `usage.mqtt.up.*`, `usage.mqtt.down.*` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
+| Both | `system.cpu`, `system.core0`, `system.core1` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 | yes |
+| Both | `system.memory.free`, `system.memory.min_free`, `system.memory.largest` | | number | B | gauge | 10 / 60 | 10 / 1, 2, 5, 10 | yes |
+| Both | `system.memory.pct` | | number | % | gauge | 10 / 60 | 10 / 1, 2, 5, 10 | yes |
+| Both | `system.nvs.pct` | | number | % | gauge | 10 / 60 | | yes |
+| Both | `system.temperature` | | number | °C | gauge | 10 / 60 | 10 / 1, 2, 5, 10 | yes |
 
 Where a row is for both boards, the first period and rates are the autopilot's, the second the gateway's. `system.temperature` exists only where the chip has a usable sensor.
 
