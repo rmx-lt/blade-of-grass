@@ -511,10 +511,10 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
   "label": "Battery",
   "metrics": [
     { "name": "battery.v", "label": "Battery voltage", "description": "Voltage measured at the battery terminals.",
-      "unit": "V", "kind": "gauge", "type": "number", "period": 1, "rates": [10, 20, 50, 100],
+      "unit": "V", "kind": "gauge", "type": "number", "period": 1, "rates": [10, 20, 50, 100], "chart": true,
       "min": 18, "max": 29.4, "low": 21, "decimals": 2 },
     { "name": "battery.pct", "key": "battery.level", "label": "Battery level", "description": "Charge left, estimated by the autopilot.",
-      "unit": "%", "kind": "gauge", "type": "number", "period": 10, "rates": [],
+      "unit": "%", "kind": "gauge", "type": "number", "period": 10, "rates": [], "chart": true,
       "min": 0, "max": 100, "low": 20, "decimals": 0 }
   ]
 }
@@ -535,10 +535,10 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 | `type` | yes | `number`, `bool` or `enum` |
 | `period` | yes | Seconds between values in telemetry; `0` means the metric is not in telemetry, only in monitor streams |
 | `rates` | yes | Monitor rates the metric offers, samples per second; empty when it cannot be monitored |
+| `chart` | yes | `true` or `false`: whether the app offers the metric in its chart picker (a latitude is not something to chart). Always stated; there is no default. It limits nothing else: the metric is still sent, stored and usable through its key |
 | `min`, `max` | no | Expected range, for chart axes and gauges |
 | `low`, `high` | no | Warning levels: the app marks a value below `low` or above `high`. For display only; the board raises its own events and faults (§7.3) |
 | `decimals` | no | Digits after the decimal point to show |
-| `chart` | no | `false` keeps the metric out of the app's chart picker (a latitude is not something to chart). Default `true`. It limits nothing else: the metric is still sent, stored and usable through its key |
 | `values` | for `enum` | The names of the values, in order; the metric's value is an index into this list, from 0 |
 
 **Families.** A name ending in `.*` describes a set of metrics that share everything but the last part, which is only known while running: the gateway's `usage.mqtt.up.*` covers one counter per MQTT topic (`usage.mqtt.up.autopilot/telemetry`). The last part may contain any characters but a dot. A member appears in telemetry once it has data, and the app lists the members it has seen.
