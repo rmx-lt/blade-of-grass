@@ -240,7 +240,11 @@ Retained. Published when a field changes and every time the gateway reports the 
 
 Fault codes: `no_fix` (RTK fix lost while following a path, longer than the autopilot tolerates), `motor_stall`, `blade_stall`, `battery_low`, `internal`.
 
-The server link is not needed to follow a path: a job continues while the gateway is offline. Live driving stops by its own timeout (§9).
+**Losing the server link.** The link counts as lost when the gateway has reported MQTT disconnected for 10 s, or the board link is down (§14.4). The mower does not work on its own without the server:
+
+- In `job` mode the autopilot pauses (`paused: true`, blade off) and publishes the event `job_paused`. It stays paused when the link returns; the server continues it with `resume`.
+- In `recording` it stops recording and goes to `manual`, as after `record_stop`, and publishes the event `recording_stopped` (§10).
+- Live driving has already stopped by its own timeout (§9).
 
 ### 7.2 `autopilot/telemetry`
 
@@ -283,6 +287,8 @@ Things that happen without a command. Command results are acks, not events.
 | `fault_cleared` | | Left `fault` |
 | `fix_lost`, `fix_regained` | `fix` | The fix dropped below or returned to `rtk_fixed` |
 | `drive_timeout` | | The live-driving stream timed out (§9) |
+| `job_paused` | `reason`: `link` | A path was paused because the server link was lost (§7.1) |
+| `recording_stopped` | `reason`: `link`, `session`, `index` | Recording ended because the server link was lost; `index` is the next index, as in the result of `record_stop` |
 | `battery_low` | `v` | Battery below the autopilot's warning level |
 
 ## 8. Autopilot commands
@@ -331,7 +337,7 @@ The same commands and setpoints will be used on a local link (gateway Wi-Fi or B
 
 The user drives the mower along a border; the autopilot streams the points and the server keeps the draft border and shows it live. The border and every edit of it belong to the server.
 
-`record_start` carries the session id, the index the next point gets, and optionally the spacing in metres (default 0.1). In `recording` the autopilot takes a point each time it has moved `spacing` from the last one, and publishes them in batches on `autopilot/recording`, at most once per second and at most 50 points per message:
+`record_start` carries the session id, the index the next point gets, and optionally the spacing in metres (default 0.1). In `recording` the autopilot takes a point each time it has moved `spacing` from the last one, while its fix is `rtk_fixed` or `rtk_float`, and publishes them in batches on `autopilot/recording`, at most once per second and at most 50 points per message:
 
 ```json
 { "session": "r-17", "index": 120, "fix": "rtk_fixed", "time": 1794650000.25,
@@ -339,8 +345,8 @@ The user drives the mower along a border; the autopilot streams the points and t
 ```
 
 - `index` is the index of the first point in the message; indexes are continuous within a session, so the server sees a gap.
-- `fix` is the worst fix of the batch.
-- While the gateway reports the server link down (§14.4) the autopilot keeps the batches and sends them when it is back.
+- `fix` is the worst fix of the batch: `rtk_fixed` or `rtk_float`. The server takes both into the border and marks the float points. With a worse fix no points are taken.
+- When the server link is lost, recording stops (§7.1). Points taken before that still arrive; nothing is recorded while offline. The user continues with a new `record_start` for the same session and the next index.
 
 **Rewind** is done by the server with existing commands: `record_stop`, then `follow` along the last recorded points in reverse order with `reverse: true`, then `record_start` with the same session and the index of the first removed point. The server cuts the removed points from its draft.
 
@@ -447,7 +453,7 @@ Autopilot → gateway:
 | 0 | 1 | Link version, `1` |
 | 1 | 1 | Flags: bit 0 ready (subscriptions sent) |
 
-The autopilot may set its clock from the heartbeat until the receiver gives it time. When bit 0 of the gateway's flags goes from 0 to 1 the autopilot republishes its state (§7.1) and sends what it held back (§10).
+The autopilot may set its clock from the heartbeat until the receiver gives it time. When bit 0 of the gateway's flags goes from 0 to 1 the autopilot republishes its state (§7.1) and its metric catalogue (§16.1).
 
 ## 15. Monitor
 
@@ -557,7 +563,7 @@ The list of values the server and the app use by themselves. It is the interface
 |---|---|---|
 | `position.lat` | number, degrees | The mower on the map (§4) |
 | `position.lon` | number, degrees | The mower on the map (§4) |
-| `position.heading` | number, degrees | The mower's direction on the map; null when not known (standing still without a heading source) |
+| `position.heading` | number, degrees | The mower's direction on the map. The receiver has one antenna, so the heading comes from movement and is null while it is not known (standing still) |
 | `gnss.fix` | enum: `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` (values 0–4) | Whether the position can be trusted |
 | `job.point` | number | Job progress and where to resume: the index of the last point reached, counted through the whole job; null outside a job. The job itself is named in state (§7.1) |
 | `battery.level` | number, % | The battery indicator |
