@@ -4,7 +4,7 @@ The contract between the mower and the server: MQTT topics and payloads, command
 
 **Contract version: 0.1.**
 
-Changed on 2026-11-15 within version 0.1: what the mower follows is a **path**, not a job (§11). The names are `path_start`, mode `path`, `path.point`, `bad_path`, `path_paused`, `path_resumed` and the topics `autopilot/path/…`; the key `path.points` is new. The server and the device simulator still use the old names until [rmx-server-app#107](https://github.com/rmx-lt/rmx-server-app/issues/107); the gateway is not affected.
+Changed on 2026-11-15 within version 0.1: what the mower follows is a **path**, not a job (§11). The names are `path_start`, mode `path`, `path.point`, `bad_path`, `path_paused`, `path_resumed` and the topics `autopilot/path/…`; the key `path.points` is new. A path segment has a `type` (`transit`, `edge`, `fill`) in place of `blade`; paths and `follow` carry no `speed`; the command `speed_limit` and the state field of that name are new (§7.1, §8, §11). The server and the device simulator use the new names; they follow the types and the speed limits in [rmx-server-app#113](https://github.com/rmx-lt/rmx-server-app/issues/113). The gateway is not affected.
 
 **Status:** this page is the target; part of it is built (on `development`, 2026-11-15). The gateway implements its own side: topics, state, commands, chunk transfer, the metric catalogue, telemetry, data-usage counters and monitor streams; a complete firmware update is not verified yet ([rmx-mower-gateway#65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)). The server receives and stores state, catalogues, telemetry and events; it does not yet send commands or serve chunk transfer under this contract ([rmx-server-app#92](https://github.com/rmx-lt/rmx-server-app/issues/92)). The board link, the NTRIP client and the autopilot are not built. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 
@@ -292,6 +292,7 @@ The server treats this message as out of date while `gateway/status` is `offline
   "path": "p-2031",
   "recording": null,
   "fault": null,
+  "speed_limit": { "max": 1.0, "transit": 0.8, "edge": 0.3, "fill": 0.5, "manual": 0.8 },
   "time": 1794650000.00
 }
 ```
@@ -304,6 +305,7 @@ The server treats this message as out of date while `gateway/status` is `offline
 | `path` | string or null | The path id while a path file runs (§11); null for a `follow` path and outside `path` mode |
 | `recording` | string or null | The session id in `recording` mode |
 | `fault` | object or null | `{"code", "message"}` in `fault` mode |
+| `speed_limit` | object | The speed limits in m/s: `max`, `transit`, `edge`, `fill`, `manual` (see Speed limits below) |
 
 | `mode` | Meaning |
 |---|---|
@@ -315,7 +317,9 @@ The server treats this message as out of date while `gateway/status` is `offline
 
 Which command is allowed in which mode, and where it leads, is one table in §8.
 
-**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path that says so (`follow` with `blade: true`, a path file's segment with `blade: true`). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the segment's `blade` in a job, the command's `blade` in `follow`. In every other case it never switches on again by itself.
+**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path whose type says so: the segment types `edge` and `fill` run the blade, `transit` does not (§11). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the type of the segment in a path file, the command's `type` in `follow`. In every other case it never switches on again by itself.
+
+**Speed limits.** The autopilot keeps five limits in m/s and reports them in `speed_limit`: `transit`, `edge` and `fill` for path segments of that type (also in `follow`), `manual` for live driving and recording (§9), and `max` for everything. The speed it drives at is its own decision, never above the limit for what it is doing and never above `max`. The command `speed_limit` (§8) changes any of them at any time, also while a path runs, and the change applies at once. The contract sets no ceiling: these are development controls, and the server may set any positive value. The limits are kept across restarts; a board that was never told uses its firmware's defaults.
 
 **Fix.** Following a path needs a fixed RTK solution (`rtk_fixed`):
 
@@ -390,7 +394,8 @@ This table is the autopilot's whole state machine. A command sent in a mode that
 | `manual_start` | | `idle` | `manual` | | |
 | `manual_stop` | | `manual` | `idle` | | |
 | `blade` | `on` (bool) | `manual`, `recording` | unchanged | | §7.1, Blade |
-| `follow` | `points`, optional `reverse` (bool), `blade` (bool), `speed` (number) | `idle`, `manual` | `path`, then back to the mode it came from | yes | Drives through 1–100 points in order; one point is "go to". `reverse: true` drives backwards without turning round. `blade` is off unless given. Error: `no_fix` |
+| `speed_limit` | `limits` (object) | any | unchanged | | Sets one or more speed limits (§7.1). `limits` has one or more of `max`, `transit`, `edge`, `fill`, `manual` with a number above 0 in m/s, or `null` for the firmware's default; limits not named stay as they are. Applied together and at once. An unknown name or a value that is not allowed fails with `bad_request` and changes nothing. Result: the `speed_limit` object as it now is |
+| `follow` | `points`, optional `reverse` (bool), `type` (string) | `idle`, `manual` | `path`, then back to the mode it came from | yes | Drives through 1–100 points in order; one point is "go to". `reverse: true` drives backwards without turning round. `type` is a segment type (§11) and is `transit` unless given; an unknown type fails with `bad_request`. Error: `no_fix` |
 | `record_start` | `session`, optional `spacing` (number, metres) | `idle`, `manual` | `recording` | | §10 |
 | `record_stop` | | `recording` | `manual` | | Result `{"index": <points taken>}` (§10) |
 | `path_start` | `path`, `size` (number), `sha256` (string), optional `from_point` (number) | `idle` | `path`, then `idle` | yes | Downloads and follows a path file (§11). Errors: `no_fix`, `download_failed`, `bad_path` |
@@ -402,7 +407,7 @@ This table is the autopilot's whole state machine. A command sent in a mode that
 | `ota` | as for the gateway (§6.4) | `idle` | `idle` | yes | Firmware update over `autopilot/fw/…`, §6.5 |
 | `restart` | | `idle`, `fault` | | | Acks, then restarts |
 
-- `speed` is a limit in m/s; the autopilot also has its own maximum and uses the lower.
+- A path carries no speed. How fast the autopilot drives is its own decision, below the speed limits (§7.1), which `speed_limit` changes at any time.
 - A path that ends by itself gets the final ack `done`; one ended by `stop` gets `cancelled`; one ended by a fault gets the fault code.
 - `follow` and `path_start` both make the autopilot follow a path in `path` mode. `follow` carries up to 100 points in the command, has no id and no point numbers, and returns to the mode it came from. `path_start` names a path file (§11), which is downloaded, has numbered points for progress and for continuing, and returns to `idle`.
 - `stop` is accepted in every mode.
@@ -419,7 +424,7 @@ The server publishes setpoints on `autopilot/drive` about 10 times per second wh
 |---|---|
 | `seq` | Counter that grows by one per setpoint. A setpoint with a `seq` not above the last applied one is dropped |
 | `time` | When the server sent it. A setpoint more than 1 s old is dropped (messages delivered in a burst after a stall). The autopilot skips this check while its clock is not set |
-| `v` | Forward speed, m/s; negative is backwards |
+| `v` | Forward speed, m/s; negative is backwards. Limited to the `manual` speed limit (§7.1) in either direction |
 | `w` | Turn rate, rad/s; positive turns left |
 
 - Setpoints are applied only in `manual` and `recording`; elsewhere they are ignored.
@@ -464,7 +469,7 @@ The user drives the mower along a border; the autopilot streams the points and t
 
 ## 11. Paths
 
-A path is what the mower follows: segments of points, each with the blade on or off. A short path fits in a `follow` command (§8, up to 100 points). A longer one is a **path file**: the autopilot downloads it and follows it. This section is about path files.
+A path is what the mower follows: segments of points, each with a type. A short path fits in a `follow` command (§8, up to 100 points). A longer one is a **path file**: the autopilot downloads it and follows it. This section is about path files.
 
 A path is all the mower knows. What is mown, when, and how far a planned mowing run got is a **job**: the server's record, which the mower never sees. The server turns a job into one or more paths.
 
@@ -489,16 +494,25 @@ The path file is JSON, at most 1 MiB:
 ```json
 {
   "path": "p-2031",
-  "speed": 0.5,
   "segments": [
-    { "blade": false, "points": [[54.68712345, 25.27965432], [54.68713001, 25.27966010]] },
-    { "blade": true,  "points": [[54.68713001, 25.27966010], [54.68719876, 25.27966020]] }
+    { "type": "transit", "points": [[54.68712345, 25.27965432], [54.68713001, 25.27966010]] },
+    { "type": "edge",    "points": [[54.68713001, 25.27966010], [54.68719876, 25.27966020]] },
+    { "type": "fill",    "points": [[54.68719876, 25.27966020], [54.68719880, 25.27990000]] }
   ]
 }
 ```
 
 - `path` is the path id and must equal the id in the command.
-- `speed` is a limit in m/s, as for `follow` (§8).
+- Every segment has a `type`. The type says what the segment is for, and the blade follows from it; there is no separate blade field.
+
+| `type` | Blade | What it is |
+|---|---|---|
+| `transit` | off | Driving between places: to the start, between zones, back at the end |
+| `edge` | on | A pass along the border of a mowing zone or around a no-go zone. It needs the tightest accuracy |
+| `fill` | on | The stripes that cover the inside of a zone, with the turns between them |
+
+- A file with a type the autopilot does not know ends the command with `bad_path`: it never guesses, because a wrong guess could run the blade.
+- The file carries no speed: each type has its own speed limit on the mower (§7.1).
 - There is at least one segment, and every segment has at least one point.
 
 The server checks every path against the map's zones before sending it: the autopilot has no map to check against.
