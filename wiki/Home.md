@@ -47,8 +47,7 @@ flowchart LR
 | Endpoint | Protocol | Purpose |
 |---|---|---|
 | `https://rmx.lt` | HTTPS | Website |
-| `https://rmx.lt/app/` | HTTPS, WSS | rmx-server: client app, its API and live updates |
-| `https://api.rmx.lt` | HTTPS | Placeholder (old `/app/` links redirect to `rmx.lt/app/`) |
+| `https://app.rmx.lt` | HTTPS, WSS | rmx-server: client app, its API and live updates |
 | `mqtt.rmx.lt:8883` | MQTT over TLS | Mower connections (login required) |
 
 ## Local layout
