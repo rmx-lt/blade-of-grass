@@ -4,7 +4,7 @@ The contract between the mower and the server: MQTT topics and payloads, command
 
 **Contract version: 0.1.**
 
-**Status:** this page is the target. The gateway and the server run an older subset today (unprefixed `status`, `cmd`, `cmd/ack`, `firmware` and `fw/…` topics, described in [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract)); the autopilot has no code. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
+**Status:** this page is the target; part of it is built (on `development`, 2026-11-15). The gateway implements its own side: topics, state, commands, chunk transfer, the metric catalogue, telemetry, data-usage counters and monitor streams; a complete firmware update is not verified yet ([rmx-mower-gateway#65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)). The server receives and stores state, catalogues, telemetry and events; it does not yet send commands or serve chunk transfer under this contract ([rmx-server-app#92](https://github.com/rmx-lt/rmx-server-app/issues/92)). The board link, the NTRIP client and the autopilot are not built. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 
 ## Contents
 
@@ -808,7 +808,7 @@ For orientation: the catalogue a board publishes is what counts, and the server 
 | Autopilot | `blade.rpm` | | number | rpm | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `system.psram.free` | | number | B | gauge | 10 | 10 | yes |
 | Autopilot | `system.psram.pct` | | number | % | gauge | 10 | 10 | yes |
-| Gateway | `signal.rssi` | `signal.strength` | number | dBm | gauge | 60 | 1, 2, 5, 10 | yes |
+| Gateway | `signal.rssi` | `signal.strength` | number | dBm | gauge | 60 | | yes |
 | Gateway | `usage.total.up`, `usage.total.down` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
 | Gateway | `usage.ntrip.up`, `usage.ntrip.down` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
 | Gateway | `usage.mqtt.up.*`, `usage.mqtt.down.*` | | number | B | counter | 60 | 1, 2, 5, 10 | yes |
@@ -822,5 +822,6 @@ For orientation: the catalogue a board publishes is what counts, and the server 
 Where a row is for both boards, the first period and rates are the autopilot's, the second the gateway's.
 
 - Processor load is read at most once per second on the autopilot: reading it briefly stops the task scheduler, which the board that drives the motors should not do often.
+- `signal.rssi` offers no fast rates: the modem answers a signal query only while its data connection is paused for 2 to 3 seconds, so the gateway reads it once a minute.
 - `system.temperature` is the autopilot's only: the gateway's chip has no usable temperature sensor.
 - These boards have no disk. Their storage is flash: the settings area (`system.nvs.pct`) today, and one more metric per file system if a board gets one.
