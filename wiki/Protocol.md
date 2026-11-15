@@ -587,6 +587,7 @@ For orientation: the catalogue a board publishes is what counts. Ranges, warning
 | Autopilot | `position.lat` | `position.lat` | number | degrees | gauge | 1 | 10 | no |
 | Autopilot | `position.lon` | `position.lon` | number | degrees | gauge | 1 | 10 | no |
 | Autopilot | `position.heading` | `position.heading` | number | degrees | gauge | 1 | 10 | no |
+| Autopilot | `position.alt` | | number | m | gauge | 0 | 10 | yes |
 | Autopilot | `position.speed` | | number | m/s | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.fix` | `gnss.fix` | enum | | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.sats` | | number | | gauge | 1 | | yes |
