@@ -319,7 +319,7 @@ Which command is allowed in which mode, and where it leads, is one table in §8.
 
 **Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path whose type says so: the segment types `edge` and `fill` run the blade, `transit` does not (§11). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the type of the segment in a path file, the command's `type` in `follow`. In every other case it never switches on again by itself.
 
-**Speed limits.** The autopilot keeps five limits in m/s and reports them in `speed_limit`: `transit`, `edge` and `fill` for path segments of that type (also in `follow`), `manual` for live driving and recording (§9), and `max` for everything. The speed it drives at is its own decision, never above the limit for what it is doing and never above `max`. The command `speed_limit` (§8) changes any of them at any time, also while a path runs, and the change applies at once. The contract sets no ceiling: these are development controls, and the server may set any positive value. The limits are kept across restarts; a board that was never told uses its firmware's defaults.
+**Speed limits.** The autopilot keeps five limits in m/s and reports them in `speed_limit`: `transit`, `edge` and `fill` for path segments of that type (also in `follow`), `manual` for live driving and recording (§9), and `max` for everything. The speed it drives at is its own decision, never above the limit for what it is doing and never above `max`. A limit of 0 means no limit: a type with 0 is limited by `max` alone, and with `max` at 0 as well the mower may use its full power. The command `speed_limit` (§8) changes any of them at any time, also while a path runs, and the change applies at once. The contract sets no ceiling: these are development controls, and the server may set any value of 0 or above. The limits are kept across restarts; a board that was never told uses its firmware's defaults.
 
 **Fix.** Following a path needs a fixed RTK solution (`rtk_fixed`):
 
@@ -394,7 +394,7 @@ This table is the autopilot's whole state machine. A command sent in a mode that
 | `manual_start` | | `idle` | `manual` | | |
 | `manual_stop` | | `manual` | `idle` | | |
 | `blade` | `on` (bool) | `manual`, `recording` | unchanged | | §7.1, Blade |
-| `speed_limit` | `limits` (object) | any | unchanged | | Sets one or more speed limits (§7.1). `limits` has one or more of `max`, `transit`, `edge`, `fill`, `manual` with a number above 0 in m/s, or `null` for the firmware's default; limits not named stay as they are. Applied together and at once. An unknown name or a value that is not allowed fails with `bad_request` and changes nothing. Result: the `speed_limit` object as it now is |
+| `speed_limit` | `limits` (object) | any | unchanged | | Sets one or more speed limits (§7.1). `limits` has one or more of `max`, `transit`, `edge`, `fill`, `manual` with a number in m/s (0 for no limit), or `null` for the firmware's default; limits not named stay as they are. Applied together and at once. An unknown name or a value that is not allowed fails with `bad_request` and changes nothing. Result: the `speed_limit` object as it now is |
 | `follow` | `points`, optional `reverse` (bool), `type` (string) | `idle`, `manual` | `path`, then back to the mode it came from | yes | Drives through 1–100 points in order; one point is "go to". `reverse: true` drives backwards without turning round. `type` is a segment type (§11) and is `transit` unless given; an unknown type fails with `bad_request`. Error: `no_fix` |
 | `record_start` | `session`, optional `spacing` (number, metres) | `idle`, `manual` | `recording` | | §10 |
 | `record_stop` | | `recording` | `manual` | | Result `{"index": <points taken>}` (§10) |
@@ -424,7 +424,7 @@ The server publishes setpoints on `autopilot/drive` about 10 times per second wh
 |---|---|
 | `seq` | Counter that grows by one per setpoint. A setpoint with a `seq` not above the last applied one is dropped |
 | `time` | When the server sent it. A setpoint more than 1 s old is dropped (messages delivered in a burst after a stall). The autopilot skips this check while its clock is not set |
-| `v` | Forward speed, m/s; negative is backwards. Limited to the `manual` speed limit (§7.1) in either direction |
+| `v` | Forward speed, m/s; negative is backwards. Limited to the `manual` speed limit and to `max` (§7.1) in either direction |
 | `w` | Turn rate, rad/s; positive turns left |
 
 - Setpoints are applied only in `manual` and `recording`; elsewhere they are ignored.
