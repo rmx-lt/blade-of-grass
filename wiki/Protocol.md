@@ -542,7 +542,7 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 | `type` | yes | `number`, `bool` or `enum` |
 | `period` | yes | Seconds between values in telemetry; `0` means the metric is not in telemetry, only in monitor streams |
 | `rates` | yes | Monitor rates the metric offers, samples per second; empty when it cannot be monitored |
-| `chart` | yes | `true` or `false`: whether the app offers the metric in its chart picker (a latitude is not something to chart). Always stated; there is no default. It limits nothing else: the metric is still sent, stored and usable through its key |
+| `chart` | yes | `true` or `false`: whether the app offers the metric in its chart picker (a latitude is not something to chart). It limits nothing else: the metric is still sent, stored and usable through its key |
 | `min`, `max` | no | Expected range, for chart axes and gauges |
 | `low`, `high` | no | Warning levels: the app marks a value below `low` or above `high`. For display only; the board raises its own events and faults (§7.3) |
 | `decimals` | no | Digits after the decimal point to show |
