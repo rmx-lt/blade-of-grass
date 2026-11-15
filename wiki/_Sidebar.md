@@ -10,6 +10,7 @@
 - [Server-App](Server-App)
 
 **Mower**
+- [Mower-Protocol](Mower-Protocol)
 - [Mower-Hardware](Mower-Hardware)
 - [Mower-Autopilot](Mower-Autopilot)
 - [Mower-Gateway](Mower-Gateway)
