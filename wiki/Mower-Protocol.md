@@ -144,7 +144,8 @@ Lost acks and repeats:
 
 - A receiver remembers every command id for at least **2 minutes**, with the last ack it sent for it. When the same id arrives again it does not run the command again: it sends that last ack again (`accepted` while the command still runs, the final ack afterwards).
 - When the server gets no ack within 5 s, it sends the command again **with the same id**, up to 3 times. After that the outcome is unknown and the server reads it from the board's state.
-- When a board's `boot` value changes, the server treats every open command of that board as failed.
+- When a board's `boot` value changes, the server treats every open command of that board as failed. The exception is `ota`, which restarts the board itself: its final ack after the restart settles the command (§6.5).
+- A command without a usable `id` (not an object, or `id` missing or not valid) gets the ack `bad_request` with an empty `id`.
 
 Error codes shared by both receivers:
 
@@ -247,7 +248,7 @@ Each metric is sent at the period its catalogue entry names (60 s for most gatew
 | `autopilot_reset` | | | Pulses the autopilot's reset line. `failed` when the line is not wired |
 | `monitor_start`, `monitor_stop` | as in §15 | | Fast sampling of gateway values, on demand |
 
-A gateway restart or update takes the mower offline, which pauses a running job (§7.1). The server sends `restart` and `ota` to the gateway only while the autopilot is `idle`.
+A gateway restart or update takes the mower offline, which pauses a running job (§7.1). The server refuses to send `restart` and `ota` to the gateway while the autopilot is known and not `idle`. It sends them when the autopilot is `idle`, and also when the gateway reports the board link down (`autopilot_link`) or no autopilot state has ever arrived: the autopilot is then not working under this gateway.
 
 ### 6.5 Firmware update
 
@@ -312,7 +313,7 @@ The server treats this message as out of date while `gateway/status` is `offline
 
 Which command is allowed in which mode, and where it leads, is one table in §8.
 
-**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path that says so (`follow` with `blade: true`, a job segment with `blade: true`). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. It never switches on again by itself, except when a path that was paused for the fix continues.
+**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path that says so (`follow` with `blade: true`, a job segment with `blade: true`). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the segment's `blade` in a job, the command's `blade` in `follow`. In every other case it never switches on again by itself.
 
 **Fix.** Following a path needs a fixed RTK solution (`rtk_fixed`):
 
@@ -322,7 +323,7 @@ Which command is allowed in which mode, and where it leads, is one table in §8.
 
 **Losing the server link** (§4.2). The mower does not work on its own without the server:
 
-- In `job` mode the autopilot pauses (`paused: "link"`) and publishes the event `job_paused`. It stays paused when the link returns; the server continues it with `resume`. A path that was paused for the fix becomes paused for the link.
+- In `job` mode the autopilot pauses (`paused: "link"`) and publishes the event `job_paused`. It stays paused when the link returns; the server continues it with `resume`. A path that was paused for the fix becomes paused for the link, and `job_paused` is published again with the reason `link`.
 - In `recording` it stops recording and goes to `manual`, as after `record_stop`, and publishes the event `recording_stopped` (§10).
 - In `manual`, live driving has already stopped by its own timeout (§9).
 
@@ -465,14 +466,14 @@ A job is a path planned by the server: segments of points, each with the blade o
 1. The server sends `job_start` with the job id, the file's `size` in bytes and its `sha256` (64 lower-case hex characters).
 2. The autopilot acks `accepted`, enters `job` mode with the job id in its state, and downloads the file `<job>.json` over `autopilot/job/…` (§12). It may skip the download when it still holds a file with that hash.
 3. It checks the file against `size` and `sha256` from the command and parses it. A mismatch or a file it cannot use ends the command with `bad_job`; a download that does not complete, with `download_failed`.
-4. It drives to the starting point with the blade off, then follows the segments in order.
+4. It drives to the starting point with the blade off, then follows the segments in order. The way to the first point of every segment is driven with the blade off.
 5. The final ack is `done` with `{"points": n}`, where `n` is the number of points in the job, and the mode returns to `idle`.
 
 Pauses (by command, lost link or lost fix, §7.1) also apply during the download: it waits and then continues.
 
 **Point numbers.** The points of a job are numbered from 0 in file order through all segments. Every point counts, also a segment's first point when it repeats the last point of the segment before.
 
-- The metric linked to the key `job.point` (§16.4) is the number of the last point reached; null before the first one.
+- The metric linked to the key `job.point` (§16.4) is the number of the last point reached; null before the first one. When the last point of the job is reached, the autopilot publishes telemetry with that number before it leaves `job` mode, so the server sees the job complete.
 - `from_point` is the number of the first point to drive to; it defaults to 0. To continue a job after a failure or a `stop`, the server sends `job_start` again with `from_point` set to the last point reached plus one.
 
 The job file is JSON, at most 1 MiB:
@@ -678,6 +679,7 @@ Errors: `bad_request` for an unknown metric, a rate a metric does not offer, or 
 **Keeping it alive.** The stream ends by itself `hold` seconds after the last `monitor_start`. While the user is watching, the server sends `monitor_start` again with the same session (and a new command id) every few seconds; that extends the stream without restarting the sample index. A stream also ends on `monitor_stop`, and every stream of a board ends when the server link is lost (§4.2). Nothing is kept back for later.
 
 - `monitor_stop` with a session that is not running is `done`.
+- `monitor_stop` without a session stops every stream of that board.
 - A session id may be used again after its stream has ended; the sample index starts from 0.
 
 **Data.** The board publishes each stream's samples on its `monitor` topic, QoS 0, one message per stream every 0.2 s (or every sample, when samples are further apart than that):
