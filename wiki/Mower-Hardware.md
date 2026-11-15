@@ -1,6 +1,6 @@
 # Mower hardware
 
-How the mower's electronics split into boards. **Status: design only, not built** (decided 2026-10-22). Building the link: [rmx-mower-gateway#40](https://github.com/rmx-lt/rmx-mower-gateway/issues/40).
+How the mower's electronics split into boards. **Status: design only, not built** (decided 2026-10-22). Building the link: [rmx-mower-gateway#62](https://github.com/rmx-lt/rmx-mower-gateway/issues/62) (gateway side) and [rmx-mower-autopilot#10](https://github.com/rmx-lt/rmx-mower-autopilot/issues/10) (autopilot side).
 
 ## Two boards
 
