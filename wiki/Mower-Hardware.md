@@ -13,7 +13,7 @@ Safety lives on the P4: it stops by itself when the link to the modem board or t
 
 ## The link
 
-UART with RTS/CTS. Frames are COBS + CRC-16; the frame types and what they carry (relayed MQTT messages as JSON, the correction stream, a heartbeat) are in [Protocol](Protocol) §14.
+UART with RTS/CTS. Frames are COBS + CRC-16; the frame types and what they carry (relayed MQTT messages as JSON, the correction stream, a heartbeat) are in [Mower-Protocol](Mower-Protocol) §14.
 
 | T-SIM7600 | Signal | P4 board (JP1) |
 |---|---|---|

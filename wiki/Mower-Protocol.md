@@ -1,4 +1,4 @@
-# Protocol
+# Mower-Protocol
 
 The contract between the mower and the server: MQTT topics and payloads, commands, job and border transfer, corrections, and the link between the mower's two boards. The server ([Server-App](Server-App)), the gateway firmware ([Mower-Gateway](Mower-Gateway)), the autopilot firmware ([Mower-Autopilot](Mower-Autopilot)) and the device simulator are written against this page.
 

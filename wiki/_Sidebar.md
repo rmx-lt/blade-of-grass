@@ -1,7 +1,6 @@
 **Project**
 - [Home](Home)
 - [Wiki-Policy](Wiki-Policy)
-- [Protocol](Protocol)
 - [Device CA](Device-CA)
 - [Project board](https://github.com/orgs/rmx-lt/projects/1)
 
@@ -11,6 +10,7 @@
 - [Server-App](Server-App)
 
 **Mower**
+- [Mower-Protocol](Mower-Protocol)
 - [Mower-Hardware](Mower-Hardware)
 - [Mower-Autopilot](Mower-Autopilot)
 - [Mower-Gateway](Mower-Gateway)
