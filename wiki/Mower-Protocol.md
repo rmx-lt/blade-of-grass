@@ -1,8 +1,10 @@
 # Mower-Protocol
 
-The contract between the mower and the server: MQTT topics and payloads, commands, job and border transfer, corrections, and the link between the mower's two boards. The server ([Server-App](Server-App)), the gateway firmware ([Mower-Gateway](Mower-Gateway)), the autopilot firmware ([Mower-Autopilot](Mower-Autopilot)) and the device simulator are written against this page.
+The contract between the mower and the server: MQTT topics and payloads, commands, path and border transfer, corrections, and the link between the mower's two boards. The server ([Server-App](Server-App)), the gateway firmware ([Mower-Gateway](Mower-Gateway)), the autopilot firmware ([Mower-Autopilot](Mower-Autopilot)) and the device simulator are written against this page.
 
 **Contract version: 0.1.**
+
+Changed on 2026-11-15 within version 0.1: what the mower follows is a **path**, not a job (§11). The names are `path_start`, mode `path`, `path.point`, `bad_path`, `path_paused`, `path_resumed` and the topics `autopilot/path/…`; the key `path.points` is new. The server and the device simulator still use the old names until [rmx-server-app#107](https://github.com/rmx-lt/rmx-server-app/issues/107); the gateway is not affected.
 
 **Status:** this page is the target; part of it is built (on `development`, 2026-11-15). The gateway implements its own side: topics, state, commands, chunk transfer, the metric catalogue, telemetry, data-usage counters and monitor streams; a complete firmware update is not verified yet ([rmx-mower-gateway#65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)). The server receives and stores state, catalogues, telemetry and events; it does not yet send commands or serve chunk transfer under this contract ([rmx-server-app#92](https://github.com/rmx-lt/rmx-server-app/issues/92)). The board link, the NTRIP client and the autopilot are not built. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 
@@ -18,7 +20,7 @@ The contract between the mower and the server: MQTT topics and payloads, command
 8. [Autopilot commands](#8-autopilot-commands)
 9. [Live driving](#9-live-driving)
 10. [Border recording](#10-border-recording)
-11. [Jobs](#11-jobs)
+11. [Paths](#11-paths)
 12. [Chunk transfer](#12-chunk-transfer)
 13. [Corrections (NTRIP)](#13-corrections-ntrip)
 14. [Board link (UART)](#14-board-link-uart)
@@ -69,7 +71,7 @@ Every device topic names its source: `mower/<name>/gateway/…` or `mower/<name>
 | `mower/<name>/autopilot/recording` | up | 1 | no | JSON points | 10 |
 | `mower/<name>/autopilot/monitor` | up | 0 | no | JSON samples | 15 |
 | `mower/<name>/autopilot/metrics/<part>` | up | 1 | yes | JSON catalogue | 16 |
-| `mower/<name>/autopilot/job/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 11, 12 |
+| `mower/<name>/autopilot/path/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 11, 12 |
 | `mower/<name>/autopilot/fw/req`, `…/chunk`, `…/res` | up, down, down | 1 | no | chunk transfer | 12 |
 
 "Up" is device → server, "down" is server → device.
@@ -81,7 +83,7 @@ The gateway publishes and subscribes the `autopilot/…` topics on the autopilot
 ## 4. Common rules
 
 - JSON payloads on MQTT are one UTF-8 object, at most **4096 bytes**. Unknown fields are ignored. The limit is for messages, not for files (§11, §12).
-- An **id** (command id, session, job, request id) is 1–64 characters of `[A-Za-z0-9_-]`.
+- An **id** (command id, session, path, request id) is 1–64 characters of `[A-Za-z0-9_-]`.
 - **Position** is latitude and longitude in degrees with 8 decimals, as the RTK receiver reports them (with LitPOS corrections that is the ETRS89 frame, a few decimetres from the WGS84 of satellite imagery). A point is the array `[lat, lon]`. Each side converts to metres internally; no local coordinate system is shared.
 - **Units:** metres, seconds, m/s, rad/s, volts, amperes, watts. Headings are degrees clockwise from true north, 0–360.
 - Only the status, state and metric catalogue topics are retained.
@@ -213,7 +215,7 @@ The gateway's measurements: signal, its own load, and how much mobile data the m
     "usage.ntrip.up": 41000, "usage.ntrip.down": 2816000,
     "usage.mqtt.up.autopilot/telemetry": 1480000,
     "usage.mqtt.up.autopilot/monitor": 912000,
-    "usage.mqtt.down.autopilot/job/chunk": 187000,
+    "usage.mqtt.down.autopilot/path/chunk": 187000,
     "usage.mqtt.down.autopilot/drive": 310000
   }
 }
@@ -232,7 +234,7 @@ Each metric is sent at the period its catalogue entry names (60 s for most gatew
 - "Up" is mower → network, "down" is network → mower.
 - They are counters (§16.3): bytes since boot, charted as a rate. The per-topic counters are a family (§16.2): a topic appears once it has carried data.
 - `total` is larger than `ntrip` plus the topics: the rest is encryption, connection set-up and keep-alive overhead, which the app shows as "other".
-- Maps and paths are the `autopilot/job/…` topics, firmware the `…/fw/…` topics, fast charts the `…/monitor` topics.
+- Maps and paths are the `autopilot/path/…` topics, firmware the `…/fw/…` topics, fast charts the `…/monitor` topics.
 - For a live view finer than a minute, the same counters can be sampled on demand (§15).
 - The gateway counts sizes only; it still does not read autopilot payloads.
 
@@ -248,7 +250,7 @@ Each metric is sent at the period its catalogue entry names (60 s for most gatew
 | `autopilot_reset` | | | Pulses the autopilot's reset line. `failed` when the line is not wired |
 | `monitor_start`, `monitor_stop` | as in §15 | | Fast sampling of gateway values, on demand |
 
-A gateway restart or update takes the mower offline, which pauses a running job (§7.1). The server refuses to send `restart` and `ota` to the gateway while the autopilot is known and not `idle`. It sends them when the autopilot is `idle`, and also when the gateway reports the board link down (`autopilot_link`) or no autopilot state has ever arrived: the autopilot is then not working under this gateway.
+A gateway restart or update takes the mower offline, which pauses a running path (§7.1). The server refuses to send `restart` and `ota` to the gateway while the autopilot is known and not `idle`. It sends them when the autopilot is `idle`, and also when the gateway reports the board link down (`autopilot_link`) or no autopilot state has ever arrived: the autopilot is then not working under this gateway.
 
 ### 6.5 Firmware update
 
@@ -285,9 +287,9 @@ The server treats this message as out of date while `gateway/status` is `offline
   "firmware": "0.1.0",
   "previous": null,
   "partition": "ota_0",
-  "mode": "job",
+  "mode": "path",
   "paused": null,
-  "job": "j-2031",
+  "path": "p-2031",
   "recording": null,
   "fault": null,
   "time": 1794650000.00
@@ -298,8 +300,8 @@ The server treats this message as out of date while `gateway/status` is `offline
 |---|---|---|
 | `protocol`, `boot`, `firmware`, `previous`, `partition`, `time` | | As in `gateway/state` (§6.2) |
 | `mode` | string | See the table below |
-| `paused` | string or null | In `job` mode: null while driving, or why the path stands still: `command`, `link` or `fix` |
-| `job` | string or null | The job id while a job runs; null for a `follow` path and outside `job` mode |
+| `paused` | string or null | In `path` mode: null while driving, or why the path stands still: `command`, `link` or `fix` |
+| `path` | string or null | The path id while a path file runs (§11); null for a `follow` path and outside `path` mode |
 | `recording` | string or null | The session id in `recording` mode |
 | `fault` | object or null | `{"code", "message"}` in `fault` mode |
 
@@ -308,22 +310,22 @@ The server treats this message as out of date while `gateway/status` is `offline
 | `idle` | Stopped, blade off |
 | `manual` | Follows the live-driving stream (§9) |
 | `recording` | As `manual`, and streams border points (§10) |
-| `job` | Downloads and follows a path: a job (§11) or a `follow` command |
+| `path` | Follows a path: a path file (§11) or a `follow` command |
 | `fault` | Stopped, blade off, refuses motion |
 
 Which command is allowed in which mode, and where it leads, is one table in §8.
 
-**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path that says so (`follow` with `blade: true`, a job segment with `blade: true`). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the segment's `blade` in a job, the command's `blade` in `follow`. In every other case it never switches on again by itself.
+**Blade.** The blade runs only after an explicit instruction: the `blade` command in `manual` and `recording`, or a path that says so (`follow` with `blade: true`, a path file's segment with `blade: true`). It switches off on every mode change, on `stop`, whenever a path is paused, on a live-driving timeout (§9) and when the server link is lost. When a paused path continues (by `resume`, or by itself after a pause for the fix), the blade returns to what the path says at that place: the segment's `blade` in a job, the command's `blade` in `follow`. In every other case it never switches on again by itself.
 
 **Fix.** Following a path needs a fixed RTK solution (`rtk_fixed`):
 
-- `follow` and `job_start` are refused with `no_fix` without one.
-- When the fix drops below `rtk_fixed` during a path, the autopilot keeps going for a short time that it sets itself (a few seconds). Then it pauses the path (`paused: "fix"`) and publishes the event `job_paused`.
-- When `rtk_fixed` returns it continues by itself and publishes `job_resumed`.
+- `follow` and `path_start` are refused with `no_fix` without one.
+- When the fix drops below `rtk_fixed` during a path, the autopilot keeps going for a short time that it sets itself (a few seconds). Then it pauses the path (`paused: "fix"`) and publishes the event `path_paused`.
+- When `rtk_fixed` returns it continues by itself and publishes `path_resumed`.
 
 **Losing the server link** (§4.2). The mower does not work on its own without the server:
 
-- In `job` mode the autopilot pauses (`paused: "link"`) and publishes the event `job_paused`. It stays paused when the link returns; the server continues it with `resume`. A path that was paused for the fix becomes paused for the link, and `job_paused` is published again with the reason `link`.
+- In `path` mode the autopilot pauses (`paused: "link"`) and publishes the event `path_paused`. It stays paused when the link returns; the server continues it with `resume`. A path that was paused for the fix becomes paused for the link, and `path_paused` is published again with the reason `link`.
 - In `recording` it stops recording and goes to `manual`, as after `record_stop`, and publishes the event `recording_stopped` (§10).
 - In `manual`, live driving has already stopped by its own timeout (§9).
 
@@ -340,7 +342,7 @@ Every value the autopilot measures or computes, position included, is a metric f
     "position.lat": 54.68712345, "position.lon": 25.27965432,
     "position.heading": 271.5, "position.speed": 0.42,
     "gnss.fix": 4, "gnss.sats": 24, "gnss.accuracy": 0.014, "gnss.correction_age": 1.2,
-    "job.point": 412,
+    "path.point": 412, "path.points": 1200,
     "battery.v": 25.3, "battery.a": 4.1, "battery.power": 103.7, "battery.pct": 78,
     "drive.left.speed": 0.41, "drive.right.speed": 0.43, "drive.left.rpm": 52, "drive.right.rpm": 55,
     "blade.on": true, "blade.rpm": 2900
@@ -351,9 +353,9 @@ Every value the autopilot measures or computes, position included, is a metric f
 - A message is sent whenever at least one metric is due, and holds the metrics that are due: each is sent at the period its catalogue entry names, so slow ones (the board's load, every 10 s) are not in every message.
 - In `idle` every metric's period is stretched to at least 10 s.
 - Metrics that belong together (the position metrics) have the same period and come from the same measurement.
-- A value that is not known is `null` (the position without a fix, the job point outside a job).
+- A value that is not known is `null` (the position without a fix, the path point outside a path).
 
-The server needs a few values to draw the map, run jobs and fill the app's fixed indicators. It asks for them by **key** (§16.4), and the catalogue says which metric answers each key; the metric names themselves are the board's choice.
+The server needs a few values to draw the map, run paths and fill the app's fixed indicators. It asks for them by **key** (§16.4), and the catalogue says which metric answers each key; the metric names themselves are the board's choice.
 
 ### 7.3 `autopilot/event`
 
@@ -373,8 +375,8 @@ Every event has `time`, `boot` and `seq`. `seq` counts the events since boot, fr
 | `fix_lost` | `fix` (string: a fix name from §16.4) | The fix dropped below `rtk_fixed` |
 | `fix_regained` | `fix` (string) | The fix returned to `rtk_fixed` |
 | `drive_timeout` | | The live-driving stream timed out (§9) |
-| `job_paused` | `reason` (string: `link` or `fix`) | The autopilot paused a path by itself (§7.1) |
-| `job_resumed` | `reason` (string: `fix`) | The autopilot continued a path by itself |
+| `path_paused` | `reason` (string: `link` or `fix`) | The autopilot paused a path by itself (§7.1) |
+| `path_resumed` | `reason` (string: `fix`) | The autopilot continued a path by itself |
 | `recording_stopped` | `reason` (string: `link`), `session` (string), `index` (number) | Recording ended because the server link was lost; `index` is the number of points taken, as in the result of `record_stop` |
 | `battery_low` | `v` (number) | The battery fell below the autopilot's warning level. The `battery_low` fault follows at a lower, critical level |
 
@@ -388,12 +390,12 @@ This table is the autopilot's whole state machine. A command sent in a mode that
 | `manual_start` | | `idle` | `manual` | | |
 | `manual_stop` | | `manual` | `idle` | | |
 | `blade` | `on` (bool) | `manual`, `recording` | unchanged | | §7.1, Blade |
-| `follow` | `points`, optional `reverse` (bool), `blade` (bool), `speed` (number) | `idle`, `manual` | `job`, then back to the mode it came from | yes | Drives through 1–100 points in order; one point is "go to". `reverse: true` drives backwards without turning round. `blade` is off unless given. Error: `no_fix` |
+| `follow` | `points`, optional `reverse` (bool), `blade` (bool), `speed` (number) | `idle`, `manual` | `path`, then back to the mode it came from | yes | Drives through 1–100 points in order; one point is "go to". `reverse: true` drives backwards without turning round. `blade` is off unless given. Error: `no_fix` |
 | `record_start` | `session`, optional `spacing` (number, metres) | `idle`, `manual` | `recording` | | §10 |
 | `record_stop` | | `recording` | `manual` | | Result `{"index": <points taken>}` (§10) |
-| `job_start` | `job`, `size` (number), `sha256` (string), optional `from_point` (number) | `idle` | `job`, then `idle` | yes | Downloads and runs a job (§11). Errors: `no_fix`, `download_failed`, `bad_job` |
-| `pause` | | `job` | `job` | | The path stands still, blade off (`paused: "command"`). `done` also when already paused |
-| `resume` | | `job` | `job` | | Continues a path paused by `command` or `link`. `done` also when not paused. Error: `no_fix` without a fixed solution |
+| `path_start` | `path`, `size` (number), `sha256` (string), optional `from_point` (number) | `idle` | `path`, then `idle` | yes | Downloads and follows a path file (§11). Errors: `no_fix`, `download_failed`, `bad_path` |
+| `pause` | | `path` | `path` | | The path stands still, blade off (`paused: "command"`). `done` also when already paused |
+| `resume` | | `path` | `path` | | Continues a path paused by `command` or `link`. `done` also when not paused. Error: `no_fix` without a fixed solution |
 | `clear_fault` | | `fault` | `idle` | | §7.1, Faults |
 | `monitor_start` | `session`, `metrics`, `rate`, optional `hold` | any | unchanged | | §15 |
 | `monitor_stop` | optional `session` | any | unchanged | | §15 |
@@ -402,6 +404,7 @@ This table is the autopilot's whole state machine. A command sent in a mode that
 
 - `speed` is a limit in m/s; the autopilot also has its own maximum and uses the lower.
 - A path that ends by itself gets the final ack `done`; one ended by `stop` gets `cancelled`; one ended by a fault gets the fault code.
+- `follow` and `path_start` both make the autopilot follow a path in `path` mode. `follow` carries up to 100 points in the command, has no id and no point numbers, and returns to the mode it came from. `path_start` names a path file (§11), which is downloaded, has numbered points for progress and for continuing, and returns to `idle`.
 - `stop` is accepted in every mode.
 
 ## 9. Live driving
@@ -459,28 +462,33 @@ The user drives the mower along a border; the autopilot streams the points and t
 
 **Losing the server link** stops recording (§7.1): the session ends as after `record_stop`, and the event `recording_stopped` reports the number of points. Nothing is recorded while offline. Points taken before the loss arrive if the link returns while the gateway still holds them (§14.2). The user continues with a new session.
 
-## 11. Jobs
+## 11. Paths
 
-A job is a path planned by the server: segments of points, each with the blade on or off. The autopilot downloads it as a file and follows it.
+A path is what the mower follows: segments of points, each with the blade on or off. A short path fits in a `follow` command (§8, up to 100 points). A longer one is a **path file**: the autopilot downloads it and follows it. This section is about path files.
 
-1. The server sends `job_start` with the job id, the file's `size` in bytes and its `sha256` (64 lower-case hex characters).
-2. The autopilot acks `accepted`, enters `job` mode with the job id in its state, and downloads the file `<job>.json` over `autopilot/job/…` (§12). It may skip the download when it still holds a file with that hash.
-3. It checks the file against `size` and `sha256` from the command and parses it. A mismatch or a file it cannot use ends the command with `bad_job`; a download that does not complete, with `download_failed`.
+A path is all the mower knows. What is mown, when, and how far a planned mowing run got is a **job**: the server's record, which the mower never sees. The server turns a job into one or more paths.
+
+Today the server plans every path. Later the mower is to plan its own path from the zones the server sends, and to send the planned path to the server, where it is shown as a preview before mowing starts. That needs a zone file and a transfer from the mower to the server, which this version does not have; `path_start` stays for paths planned by the server.
+
+1. The server sends `path_start` with the path id, the file's `size` in bytes and its `sha256` (64 lower-case hex characters).
+2. The autopilot acks `accepted`, enters `path` mode with the path id in its state, and downloads the file `<path>.json` over `autopilot/path/…` (§12). It may skip the download when it still holds a file with that hash.
+3. It checks the file against `size` and `sha256` from the command and parses it. A mismatch or a file it cannot use ends the command with `bad_path`; a download that does not complete, with `download_failed`.
 4. It drives to the starting point with the blade off, then follows the segments in order. The way to the first point of every segment is driven with the blade off.
-5. The final ack is `done` with `{"points": n}`, where `n` is the number of points in the job, and the mode returns to `idle`.
+5. The final ack is `done` with `{"points": n}`, where `n` is the number of points in the path, and the mode returns to `idle`.
 
 Pauses (by command, lost link or lost fix, §7.1) also apply during the download: it waits and then continues.
 
-**Point numbers.** The points of a job are numbered from 0 in file order through all segments. Every point counts, also a segment's first point when it repeats the last point of the segment before.
+**Point numbers.** The points of a path file are numbered from 0 in file order through all segments. Every point counts, also a segment's first point when it repeats the last point of the segment before.
 
-- The metric linked to the key `job.point` (§16.4) is the number of the last point reached; null before the first one. When the last point of the job is reached, the autopilot publishes telemetry with that number before it leaves `job` mode, so the server sees the job complete.
-- `from_point` is the number of the first point to drive to; it defaults to 0. To continue a job after a failure or a `stop`, the server sends `job_start` again with `from_point` set to the last point reached plus one.
+- The metric linked to the key `path.point` (§16.4) is the number of the last point reached; null before the first one. When the last point of the path is reached, the autopilot publishes telemetry with that number before it leaves `path` mode, so the server sees the path complete.
+- The metric linked to the key `path.points` is the number of points in the path file, known once the file is parsed; null before that and outside a path file. With `path.point` it gives the progress as a fraction.
+- `from_point` is the number of the first point to drive to; it defaults to 0. To continue a path after a failure or a `stop`, the server sends `path_start` again with `from_point` set to the last point reached plus one.
 
-The job file is JSON, at most 1 MiB:
+The path file is JSON, at most 1 MiB:
 
 ```json
 {
-  "job": "j-2031",
+  "path": "p-2031",
   "speed": 0.5,
   "segments": [
     { "blade": false, "points": [[54.68712345, 25.27965432], [54.68713001, 25.27966010]] },
@@ -489,15 +497,15 @@ The job file is JSON, at most 1 MiB:
 }
 ```
 
-- `job` is the job id and must equal the id in the command.
+- `path` is the path id and must equal the id in the command.
 - `speed` is a limit in m/s, as for `follow` (§8).
 - There is at least one segment, and every segment has at least one point.
 
-The server checks every job against the map's zones before sending it: the autopilot has no map to check against.
+The server checks every path against the map's zones before sending it: the autopilot has no map to check against.
 
 ## 12. Chunk transfer
 
-Firmware images and job files are downloaded as binary chunks over MQTT, pulled by the board that needs them. This section is the whole definition; the server's implementation is described in [Server-App](Server-App#firmware-over-mqtt).
+Firmware images and path files are downloaded as binary chunks over MQTT, pulled by the board that needs them. This section is the whole definition; the server's implementation is described in [Server-App](Server-App#firmware-over-mqtt).
 
 Three topic sets use it. In each, the board publishes requests on `req`, and the server answers with a binary chunk on `chunk` or a JSON error on `res`:
 
@@ -505,9 +513,9 @@ Three topic sets use it. In each, the board publishes requests on `req`, and the
 |---|---|---|---|
 | `gateway/fw/req`, `chunk`, `res` | Gateway | Signed gateway images | `<version>.bin` |
 | `autopilot/fw/req`, `chunk`, `res` | Autopilot | Signed autopilot images | `<version>.bin` |
-| `autopilot/job/req`, `chunk`, `res` | Autopilot | Job files | `<job>.json` |
+| `autopilot/path/req`, `chunk`, `res` | Autopilot | Path files | `<path>.json` |
 
-The server keeps the three sets of files apart: a request on one topic set can only reach that set's files. A file name is 1–128 characters of `[A-Za-z0-9._-]`, never a path. A firmware image is at most 32 MiB, a job file 1 MiB.
+The server keeps the three sets of files apart: a request on one topic set can only reach that set's files. A file name is 1–128 characters of `[A-Za-z0-9._-]`, never a directory path. A firmware image is at most 32 MiB, a path file 1 MiB.
 
 ### 12.1 Request
 
@@ -613,7 +621,7 @@ The gateway adds the prefix when it publishes and removes it when it delivers, s
 - A sender that gets no ACK within 200 ms sends the frame again, up to 5 times. Then it drops the frame and counts it (metric `link.dropped`).
 - Other frames (QoS 0 messages, corrections, heartbeats, ACKs) are sent in between and never acknowledged.
 
-**SUBSCRIBE** body: a sequence number (1 byte), then one or more entries of QoS (1 byte), topic length (1 byte), topic (without the prefix; no wildcards). The gateway replaces the previous list with it and subscribes again after every MQTT reconnect. The autopilot sends its list after it starts, and again whenever the gateway's heartbeat asks for it (§14.4). Version 0.1's list is `cmd`, `drive`, `job/chunk`, `job/res`, `fw/chunk`, `fw/res`.
+**SUBSCRIBE** body: a sequence number (1 byte), then one or more entries of QoS (1 byte), topic length (1 byte), topic (without the prefix; no wildcards). The gateway replaces the previous list with it and subscribes again after every MQTT reconnect. The autopilot sends its list after it starts, and again whenever the gateway's heartbeat asks for it (§14.4). Version 0.1's list is `cmd`, `drive`, `path/chunk`, `path/res`, `fw/chunk`, `fw/res`.
 
 **When a side is unreachable:**
 
@@ -713,7 +721,7 @@ State (§6.2, §7.1), events (§7.3) and recorded border points (§10) are not m
 The catalogue is split into parts so that each message fits 4096 bytes; normally one part per group, where a metric's group is its name up to the first dot (`battery`, `drive`, `system`, `usage`). A part name is 1–32 characters of `[a-z0-9_-]`. The part `index` lists the others:
 
 ```json
-{ "revision": 12, "parts": ["battery", "drive", "blade", "position", "gnss", "job", "system"] }
+{ "revision": 12, "parts": ["battery", "drive", "blade", "position", "gnss", "path", "system"] }
 ```
 
 ```json
@@ -772,7 +780,8 @@ The list of values the server and the app use by themselves. It is the interface
 | `position.lon` | number, degrees | The mower on the map (§4) |
 | `position.heading` | number, degrees | The mower's direction on the map. The receiver has one antenna, so the heading comes from movement and is null while it is not known (standing still) |
 | `gnss.fix` | enum: `none`, `single`, `dgps`, `rtk_float`, `rtk_fixed` (values 0–4) | Whether the position can be trusted |
-| `job.point` | number | Job progress and where to continue (§11) |
+| `path.point` | number | Progress along a path and where to continue (§11) |
+| `path.points` | number | The length of the path, for progress as a fraction (§11) |
 | `battery.level` | number, % | The battery indicator |
 | `blade.on` | bool | The blade indicator |
 | `signal.strength` | number, dBm | The signal indicator |
@@ -781,7 +790,7 @@ Rules:
 
 - A key is linked by exactly one metric of the mower, on either board.
 - The metric has the key's type and unit; the server converts nothing. For an enum key, the metric's `values` are the key's values in the same order.
-- Metrics whose keys belong together (`position.lat`, `position.lon`, `position.heading`, `gnss.fix`) have the same period and come from the same measurement.
+- Metrics whose keys belong together (`position.lat`, `position.lon`, `position.heading`, `gnss.fix`; `path.point`, `path.points`) have the same period and come from the same measurement.
 - The server reads the links from the catalogues it uses (§16.1). A key that no metric links, or that more than one links, counts as not linked: the app reports it, and what depends on it is not shown.
 
 ### 16.5 Metrics of version 0.1 firmware
@@ -799,7 +808,8 @@ For orientation: the catalogue a board publishes is what counts, and the server 
 | Autopilot | `gnss.sats` | | number | | gauge | 1 | | yes |
 | Autopilot | `gnss.accuracy` | | number | m | gauge | 1 | 10 | yes |
 | Autopilot | `gnss.correction_age` | | number | s | gauge | 1 | | yes |
-| Autopilot | `job.point` | `job.point` | number | | gauge | 1 | | no |
+| Autopilot | `path.point` | `path.point` | number | | gauge | 1 | | no |
+| Autopilot | `path.points` | `path.points` | number | | gauge | 1 | | no |
 | Autopilot | `battery.v` | | number | V | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `battery.a` | | number | A | gauge | 1 | 10, 20, 50, 100 | yes |
 | Autopilot | `battery.power` | | number | W | gauge | 1 | 10, 20, 50, 100 | yes |
