@@ -2,7 +2,7 @@
 
 The contract between the mower and the server: MQTT topics and payloads, commands, job and border transfer, corrections, and the link between the mower's two boards. The server ([Server-App](Server-App)), the gateway firmware ([Mower-Gateway](Mower-Gateway)), the autopilot firmware ([Mower-Autopilot](Mower-Autopilot)) and the device simulator are written against this page.
 
-**Contract version: 0.1.** Version 1 is the fully operational mower.
+**Contract version: 0.1.**
 
 **Status:** this page is the target. The gateway and the server run an older subset today (unprefixed `status`, `cmd`, `cmd/ack`, `firmware` and `fw/…` topics, described in [Mower-Gateway-Server-Contract](Mower-Gateway-Server-Contract)); the autopilot has no code. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 
@@ -40,6 +40,7 @@ Hardware the contract assumes: drive motors with encoders, blade motor(s) with a
 - The version is `major.minor`. Each side reports the version it implements in its retained state message (`protocol`, §6.2 and §7.1). Other messages carry no version.
 - A minor version only adds: new topics, new commands, new optional fields. Receivers ignore fields and events they do not know and answer an unknown command with `unknown_cmd`.
 - A major version may change or remove anything. While the major version is 0, a minor version may too.
+- Version 1 is the fully operational mower.
 
 ## 3. Topics
 
