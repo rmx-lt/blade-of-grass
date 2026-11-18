@@ -1,8 +1,8 @@
 """Weekly drift scan across the rmx-lt repos.
 
 On each repo's development branch: the caller workflows match the canonical
-files (tools/drift/callers/: the old single rmx.yml, or the split layout in
-callers/split/ during the move of rmx-lt/blade-of-grass#74), rulesets and has_wiki match tools/rulesets, and
+files in tools/drift/callers/split/ (an rmx.yml, the layout before
+rmx-lt/blade-of-grass#74, is drift), rulesets and has_wiki match tools/rulesets, and
 README.md and LICENSE exist. The GitHub wiki tip must be a "Publish wiki from"
 commit, so a direct edit shows up until the next publish overwrites it.
 
@@ -41,11 +41,9 @@ PUBLISH_PREFIX = "Publish wiki from"
 MARKER = "<!-- drift-scan -->"
 FILES = ("LICENSE", "README.md")
 WORKFLOWS = ".github/workflows/"
-CALLER = WORKFLOWS + "rmx.yml"
-# shortcut: both layouts pass while rmx-lt/blade-of-grass#74 moves the repos;
-# drop the rmx.yml branch (and callers/component.yml, dot-github.yml) after.
+OLD_CALLER = WORKFLOWS + "rmx.yml"
 SPLIT = ("add-to-project", "wiki-check", "wiki-dispatch")
-CALLER_PATHS = (CALLER, *(f"{WORKFLOWS}{name}.yml" for name in SPLIT))
+CALLER_PATHS = (OLD_CALLER, *(f"{WORKFLOWS}{name}.yml" for name in SPLIT))
 HOME_USES = {
     "add-to-project": "uses: ./.github/workflows/reusable-add-to-project.yml",
     "wiki-check": "uses: ./.github/workflows/reusable-wiki-check.yml",
@@ -84,31 +82,20 @@ def check_caller(repo: str, files: dict[str, str | None],
                  templates: dict[str, str]) -> list[str]:
     """files maps each of CALLER_PATHS to its text, or None when missing."""
     norm = {path: normalize_text(text) for path, text in files.items() if text is not None}
+    lines = [f"{repo}: {OLD_CALLER} is the old layout; remove it"] if OLD_CALLER in norm else []
     if repo == HOME:
-        # The old shared files have the split names here, so rmx.yml picks the layout.
-        if CALLER in norm:
-            missing = [n for n in HOME_USES.values() if n not in norm[CALLER]]
-            return [f"{repo}: {CALLER} does not call {', '.join(missing)}"] if missing else []
-        return [f"{repo}: {WORKFLOWS}{name}.yml does not call {needle}"
-                for name, needle in HOME_USES.items()
-                if needle not in norm.get(f"{WORKFLOWS}{name}.yml", "")]
-    kind = "dot-github" if repo == ".github" else "component"
-    split = [n for n in SPLIT if not (kind == "dot-github" and n == "wiki-dispatch")]
-    present = [p for p in CALLER_PATHS[1:] if p in norm]
-    if CALLER in norm:
-        if present:
-            return [f"{repo}: both {CALLER} and {', '.join(present)} on development; keep one layout"]
-        if norm[CALLER] != normalize_text(templates[kind]):
-            return [f"{repo}: {CALLER} differs from tools/drift/callers/{kind}.yml"]
-        return []
-    if not present:
-        return [f"{repo}: {CALLER} missing on development (or the split callers)"]
-    lines = []
+        # wiki-publish.yml runs on pushes here, so no wiki-dispatch caller.
+        lines += [f"{repo}: {WORKFLOWS}{name}.yml does not call {needle}"
+                  for name, needle in HOME_USES.items()
+                  if needle not in norm.get(f"{WORKFLOWS}{name}.yml", "")]
+        if f"{WORKFLOWS}wiki-dispatch.yml" in norm:
+            lines.append(f"{repo}: {WORKFLOWS}wiki-dispatch.yml not expected")
+        return lines
     for name in SPLIT:
         path = f"{WORKFLOWS}{name}.yml"
-        if name not in split:
+        if repo == ".github" and name == "wiki-dispatch":  # no wiki/ folder
             if path in norm:
-                lines.append(f"{repo}: {path} not expected in {kind}")
+                lines.append(f"{repo}: {path} not expected")
         elif path not in norm:
             lines.append(f"{repo}: {path} missing on development")
         elif norm[path] != normalize_text(templates[f"split/{name}"]):
