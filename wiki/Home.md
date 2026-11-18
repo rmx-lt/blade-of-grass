@@ -70,6 +70,8 @@ Pages live in each repo's `wiki/` folder and change by pull request. The rules a
 
 ## Repo settings
 
+What runs in GitHub Actions, when and why: [Pipelines](Pipelines).
+
 Branch rulesets and `has_wiki` of every rmx-lt repo come from `tools/rulesets/` in blade-of-grass. Change the definitions there, run `python tools/rulesets/apply.py` (dry run), then `python tools/rulesets/apply.py --apply`. They are applied per repo because organization rulesets need GitHub Team.
 
 A weekly workflow runs `python tools/drift/scan.py`. It opens one issue when a caller workflow, a ruleset, `has_wiki`, `LICENSE` or `README.md` drifts, or when the GitHub wiki has commits after the last publish. The workflow uses the org secret `DRIFT_SCAN_TOKEN` (Administration read, Contents read, Issues write on the rmx-lt repos).

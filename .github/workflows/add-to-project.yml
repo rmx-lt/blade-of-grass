@@ -1,24 +1,17 @@
-# Reusable: adds a new issue to the org project Blade of Grass
-# (https://github.com/orgs/rmx-lt/projects/1). The project's own auto-add
-# workflow covers only one repo on our plan, so every repo calls this from its
-# rmx.yml. Status, Priority and Area are still set by hand. Needs the org
-# secret PROJECT_PAT (token with Projects read/write on rmx-lt).
-# rmx-lt/blade-of-grass#8, rmx-lt/blade-of-grass#30
+# Adds new issues to the org project Blade of Grass. Runs when an issue is
+# opened, reopened or transferred. Why: the project's auto-add covers only one
+# repo on our plan. Calls the reusable workflow next to it; the other repos call
+# the same file from rmx-lt/blade-of-grass (tools/drift/callers/split/).
+# Spec: https://github.com/rmx-lt/blade-of-grass/issues/74
 name: add-to-project
 
 on:
-  workflow_call:
-    secrets:
-      PROJECT_PAT:
-        required: false
+  issues:
+    types: [opened, reopened, transferred]
 
 permissions: {}
 
 jobs:
-  add:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/add-to-project@v1.0.2
-        with:
-          project-url: https://github.com/orgs/rmx-lt/projects/1
-          github-token: ${{ secrets.PROJECT_PAT }}
+  add-to-project:
+    uses: ./.github/workflows/reusable-add-to-project.yml
+    secrets: inherit

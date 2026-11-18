@@ -2,6 +2,7 @@
 - [Home](Home)
 - [Wiki-Policy](Wiki-Policy)
 - [Device CA](Device-CA)
+- [Pipelines](Pipelines)
 - [Project board](https://github.com/orgs/rmx-lt/projects/1)
 
 **Server**

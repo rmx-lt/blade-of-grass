@@ -25,10 +25,6 @@ def synced(repo):
     return [as_github(r, i) for i, r in enumerate(scan.apply.desired(repo, SHARED, CI), 1)]
 
 
-def old(text):
-    return {scan.CALLER: text}
-
-
 def split(**texts):
     return {f"{scan.WORKFLOWS}{name.replace('_', '-')}.yml": text for name, text in texts.items()}
 
@@ -36,8 +32,6 @@ def split(**texts):
 class CallerTest(unittest.TestCase):
     def setUp(self):
         self.templates = {
-            "component": "name: rmx\nuses: remote\n",
-            "dot-github": "name: rmx\nuses: meta\n",
             "split/add-to-project": "name: add-to-project\n",
             "split/wiki-check": "name: wiki-check\n",
             "split/wiki-dispatch": "name: wiki-dispatch\n",
@@ -47,27 +41,9 @@ class CallerTest(unittest.TestCase):
                                wiki_dispatch="name: wiki-dispatch\n")
 
     def test_component_match_ignores_line_endings(self):
-        self.assertEqual(
-            scan.check_caller("rmx-server-app", old("name: rmx\r\nuses: remote\r\n"), self.templates),
-            [])
-
-    def test_component_differs(self):
-        got = scan.check_caller("rmx-server-app", old("name: rmx\nuses: other\n"), self.templates)
-        self.assertEqual(got, [
-            "rmx-server-app: .github/workflows/rmx.yml differs from tools/drift/callers/component.yml"])
-
-    def test_missing(self):
-        self.assertIn("missing", scan.check_caller("rmx-server-app", {}, self.templates)[0])
-        self.assertIn("missing", scan.check_caller("rmx-server-app", old(None), self.templates)[0])
-
-    def test_dot_github_uses_its_own_template(self):
-        self.assertEqual(scan.check_caller(".github", old("name: rmx\nuses: meta\n"), self.templates), [])
-        self.assertTrue(scan.check_caller(".github", old("name: rmx\nuses: remote\n"), self.templates))
-
-    def test_component_split_layout(self):
         self.assertEqual(scan.check_caller("rmx-server-app", self.component, self.templates), [])
 
-    def test_component_split_missing_and_differing(self):
+    def test_component_missing_and_differing(self):
         files = dict(self.component)
         del files[".github/workflows/wiki-dispatch.yml"]
         files[".github/workflows/wiki-check.yml"] = "name: other\n"
@@ -76,43 +52,43 @@ class CallerTest(unittest.TestCase):
             "rmx-server-app: .github/workflows/wiki-dispatch.yml missing on development",
         ])
 
-    def test_dot_github_split_has_no_wiki_dispatch(self):
+    def test_nothing_is_all_missing(self):
+        self.assertEqual(len(scan.check_caller("rmx-server-app", {}, self.templates)), 3)
+
+    def test_dot_github_has_no_wiki_dispatch(self):
         files = split(add_to_project="name: add-to-project\n", wiki_check="name: wiki-check\n")
         self.assertEqual(scan.check_caller(".github", files, self.templates), [])
         self.assertEqual(scan.check_caller(".github", self.component, self.templates), [
-            ".github: .github/workflows/wiki-dispatch.yml not expected in dot-github"])
+            ".github: .github/workflows/wiki-dispatch.yml not expected"])
 
-    def test_mixed_layouts_are_drift(self):
-        files = {**old("name: rmx\nuses: remote\n"), **self.component}
-        self.assertIn("keep one layout", scan.check_caller("rmx-server-app", files, self.templates)[0])
+    def test_old_rmx_yml_is_drift(self):
+        files = {scan.OLD_CALLER: "name: rmx\n", **self.component}
+        self.assertEqual(scan.check_caller("rmx-server-app", files, self.templates), [
+            "rmx-server-app: .github/workflows/rmx.yml is the old layout; remove it"])
+        self.assertIn("old layout", scan.check_caller(scan.HOME, {scan.OLD_CALLER: "x\n"}, self.templates)[0])
 
     def test_home_checks_local_uses(self):
-        text = "\n".join(scan.HOME_USES.values()) + "\n"
-        self.assertEqual(scan.check_caller(scan.HOME, old(text), self.templates), [])
-        self.assertTrue(scan.check_caller(scan.HOME, old("name: rmx\n"), self.templates))
-        self.assertTrue(scan.check_caller(
-            scan.HOME, old("uses: ./.github/workflows/add-to-project.yml\n"), self.templates))
-
-    def test_home_split_layout(self):
         files = split(add_to_project=scan.HOME_USES["add-to-project"] + "\n",
                       wiki_check=scan.HOME_USES["wiki-check"] + "\n")
         self.assertEqual(scan.check_caller(scan.HOME, files, self.templates), [])
         files[".github/workflows/wiki-check.yml"] = "on: workflow_call\n"
+        files[".github/workflows/wiki-dispatch.yml"] = "on: workflow_call\n"
         self.assertEqual(scan.check_caller(scan.HOME, files, self.templates), [
-            f"{scan.HOME}: .github/workflows/wiki-check.yml does not call {scan.HOME_USES['wiki-check']}"])
+            f"{scan.HOME}: .github/workflows/wiki-check.yml does not call {scan.HOME_USES['wiki-check']}",
+            f"{scan.HOME}: .github/workflows/wiki-dispatch.yml not expected"])
 
-    def test_home_caller_matches_the_repo(self):
-        text = (scan.HERE.parent.parent / scan.CALLER).read_text(encoding="utf-8")
-        self.assertEqual(scan.check_caller(scan.HOME, old(text), self.templates), [])
+    def test_home_callers_match_the_repo(self):
+        root = scan.HERE.parent.parent
+        files = {path: (root / path).read_text(encoding="utf-8") if (root / path).exists() else None
+                 for path in scan.CALLER_PATHS}
+        self.assertEqual(scan.check_caller(scan.HOME, files, self.templates), [])
 
     def test_ansi_codes_are_stripped_from_gh_json(self):
         self.assertEqual(scan.ANSI.sub("", "\x1b[1;37m[\x1b[m"), "[")
 
     def test_shipped_templates_match_the_contract(self):
         shipped = scan.load_templates()
-        self.assertIn("wiki-dispatch.yml@development", shipped["component"])
-        self.assertNotIn("workflows/wiki-dispatch.yml", shipped["dot-github"])
-        self.assertIn("add-to-project.yml@development", shipped["dot-github"])
+        self.assertEqual(sorted(shipped), [f"split/{name}" for name in scan.SPLIT])
         for name in scan.SPLIT:
             self.assertIn(f"workflows/reusable-{name}.yml@development", shipped[f"split/{name}"])
         self.assertIn("  wiki-check:\n", shipped["split/wiki-check"])
@@ -170,8 +146,9 @@ class CollectTest(unittest.TestCase):
     def test_clean_repo_and_wiki(self):
         repo = "rmx-server-app"
         rules = synced(repo)
+        templates = scan.load_templates()
         files = {
-            scan.CALLER: "name: rmx\nuses: remote\n",
+            **{f"{scan.WORKFLOWS}{name}.yml": templates[f"split/{name}"] for name in scan.SPLIT},
             "LICENSE": "Apache\n",
             "README.md": "Hi\n",
         }
@@ -194,7 +171,7 @@ class CollectTest(unittest.TestCase):
             raise AssertionError(args)
 
         findings = scan.collect(
-            gh, {"component": files[scan.CALLER], "dot-github": "other\n"},
+            gh, templates,
             SHARED, CI, ([("abc", "Publish wiki from x")], None))
         self.assertEqual(findings, [])
 
@@ -266,8 +243,8 @@ class IssueTest(unittest.TestCase):
             return json.dumps([{"name": repo}])
         if args[:2] == ["api", "-H"]:
             path = args[3].split("contents/")[1].split("?")[0]
-            if path == scan.CALLER:
-                return (scan.HERE / "callers" / "component.yml").read_text(encoding="utf-8")
+            if path in scan.CALLER_PATHS[1:]:
+                return (scan.HERE / "callers" / "split" / path.rsplit("/", 1)[1]).read_text(encoding="utf-8")
             if path in scan.FILES:
                 return "present\n"
             raise scan.apply.GhError("404 Not Found")
