@@ -1,7 +1,11 @@
 # Builds the GitHub wiki from the wiki/ folders of the rmx-lt repos
 # (tools/wiki/build.py, config in tools/wiki/config.json) and, once the repo
 # variable WIKI_PUBLISH_LIVE is 'true', pushes the result to the wiki.
-# Until then it is a dry run: the built wiki is only uploaded as an artifact.
+# Runs on wiki PRs (build only, as a check), on pushes to development and
+# production, weekly, on demand, and on the wiki-publish dispatch that the
+# component repos send when their wiki/ changes. Only development publishes.
+# Why: wiki pages live next to the code and change by PR; the GitHub wiki is
+# generated, never edited by hand.
 # Spec: https://github.com/rmx-lt/blade-of-grass/issues/26
 name: wiki-publish
 
@@ -55,7 +59,7 @@ jobs:
       - name: Build wiki
         run: python3 tools/wiki/build.py --src SRC --out OUT
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wiki
           path: OUT

@@ -1,9 +1,11 @@
 # Weekly drift scan: callers, rulesets, has_wiki, LICENSE, README, and direct
 # edits on the GitHub wiki (tools/drift/scan.py). Opens or updates one issue.
+# Runs Mondays at 04:47 UTC and on demand. Why: the repos share one setup
+# defined here, and nothing else notices when one of them drifts from it.
 # Needs the org secret DRIFT_SCAN_TOKEN, a fine-grained PAT on rmx-lt (all
 # repositories) with Administration read, Contents read, Issues read and write,
 # and Metadata read. GITHUB_TOKEN cannot read rulesets in the other repos.
-# A PAT-created issue still triggers rmx.yml, which adds it to the project.
+# A PAT-created issue still triggers the repo's add-to-project caller.
 # Spec: https://github.com/rmx-lt/blade-of-grass/issues/32
 name: drift-scan
 

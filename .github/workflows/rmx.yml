@@ -1,5 +1,6 @@
 # The one caller of the shared rmx-lt workflows in blade-of-grass. Component
-# repos call the same files by rmx-lt/blade-of-grass/.github/workflows/<file>@development.
+# repos call the same files by rmx-lt/blade-of-grass/.github/workflows/<file>@development
+# (moving to the reusable-* files, https://github.com/rmx-lt/blade-of-grass/issues/74).
 # No wiki-dispatch job here: wiki-publish.yml already runs on pushes.
 # Spec: https://github.com/rmx-lt/blade-of-grass/issues/30
 name: rmx
@@ -16,7 +17,7 @@ permissions: {}
 jobs:
   add-to-project:
     if: github.event_name == 'issues'
-    uses: ./.github/workflows/add-to-project.yml
+    uses: ./.github/workflows/reusable-add-to-project.yml
     secrets: inherit
 
   wiki-check:
@@ -24,4 +25,4 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/wiki-check.yml
+    uses: ./.github/workflows/reusable-wiki-check.yml
