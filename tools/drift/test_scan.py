@@ -25,34 +25,85 @@ def synced(repo):
     return [as_github(r, i) for i, r in enumerate(scan.apply.desired(repo, SHARED, CI), 1)]
 
 
+def old(text):
+    return {scan.CALLER: text}
+
+
+def split(**texts):
+    return {f"{scan.WORKFLOWS}{name.replace('_', '-')}.yml": text for name, text in texts.items()}
+
+
 class CallerTest(unittest.TestCase):
     def setUp(self):
         self.templates = {
             "component": "name: rmx\nuses: remote\n",
             "dot-github": "name: rmx\nuses: meta\n",
+            "split/add-to-project": "name: add-to-project\n",
+            "split/wiki-check": "name: wiki-check\n",
+            "split/wiki-dispatch": "name: wiki-dispatch\n",
         }
+        self.component = split(add_to_project="name: add-to-project\n",
+                               wiki_check="name: wiki-check\r\n",
+                               wiki_dispatch="name: wiki-dispatch\n")
 
     def test_component_match_ignores_line_endings(self):
         self.assertEqual(
-            scan.check_caller("rmx-server-app", "name: rmx\r\nuses: remote\r\n", self.templates),
+            scan.check_caller("rmx-server-app", old("name: rmx\r\nuses: remote\r\n"), self.templates),
             [])
 
     def test_component_differs(self):
-        got = scan.check_caller("rmx-server-app", "name: rmx\nuses: other\n", self.templates)
+        got = scan.check_caller("rmx-server-app", old("name: rmx\nuses: other\n"), self.templates)
         self.assertEqual(got, [
             "rmx-server-app: .github/workflows/rmx.yml differs from tools/drift/callers/component.yml"])
 
     def test_missing(self):
-        self.assertIn("missing", scan.check_caller("rmx-server-app", None, self.templates)[0])
+        self.assertIn("missing", scan.check_caller("rmx-server-app", {}, self.templates)[0])
+        self.assertIn("missing", scan.check_caller("rmx-server-app", old(None), self.templates)[0])
 
     def test_dot_github_uses_its_own_template(self):
-        self.assertEqual(scan.check_caller(".github", "name: rmx\nuses: meta\n", self.templates), [])
-        self.assertTrue(scan.check_caller(".github", "name: rmx\nuses: remote\n", self.templates))
+        self.assertEqual(scan.check_caller(".github", old("name: rmx\nuses: meta\n"), self.templates), [])
+        self.assertTrue(scan.check_caller(".github", old("name: rmx\nuses: remote\n"), self.templates))
+
+    def test_component_split_layout(self):
+        self.assertEqual(scan.check_caller("rmx-server-app", self.component, self.templates), [])
+
+    def test_component_split_missing_and_differing(self):
+        files = dict(self.component)
+        del files[".github/workflows/wiki-dispatch.yml"]
+        files[".github/workflows/wiki-check.yml"] = "name: other\n"
+        self.assertEqual(scan.check_caller("rmx-server-app", files, self.templates), [
+            "rmx-server-app: .github/workflows/wiki-check.yml differs from tools/drift/callers/split/wiki-check.yml",
+            "rmx-server-app: .github/workflows/wiki-dispatch.yml missing on development",
+        ])
+
+    def test_dot_github_split_has_no_wiki_dispatch(self):
+        files = split(add_to_project="name: add-to-project\n", wiki_check="name: wiki-check\n")
+        self.assertEqual(scan.check_caller(".github", files, self.templates), [])
+        self.assertEqual(scan.check_caller(".github", self.component, self.templates), [
+            ".github: .github/workflows/wiki-dispatch.yml not expected in dot-github"])
+
+    def test_mixed_layouts_are_drift(self):
+        files = {**old("name: rmx\nuses: remote\n"), **self.component}
+        self.assertIn("keep one layout", scan.check_caller("rmx-server-app", files, self.templates)[0])
 
     def test_home_checks_local_uses(self):
-        text = "\n".join(scan.HOME_USES) + "\n"
-        self.assertEqual(scan.check_caller(scan.HOME, text, self.templates), [])
-        self.assertTrue(scan.check_caller(scan.HOME, "name: rmx\n", self.templates))
+        text = "\n".join(scan.HOME_USES.values()) + "\n"
+        self.assertEqual(scan.check_caller(scan.HOME, old(text), self.templates), [])
+        self.assertTrue(scan.check_caller(scan.HOME, old("name: rmx\n"), self.templates))
+        self.assertTrue(scan.check_caller(
+            scan.HOME, old("uses: ./.github/workflows/add-to-project.yml\n"), self.templates))
+
+    def test_home_split_layout(self):
+        files = split(add_to_project=scan.HOME_USES["add-to-project"] + "\n",
+                      wiki_check=scan.HOME_USES["wiki-check"] + "\n")
+        self.assertEqual(scan.check_caller(scan.HOME, files, self.templates), [])
+        files[".github/workflows/wiki-check.yml"] = "on: workflow_call\n"
+        self.assertEqual(scan.check_caller(scan.HOME, files, self.templates), [
+            f"{scan.HOME}: .github/workflows/wiki-check.yml does not call {scan.HOME_USES['wiki-check']}"])
+
+    def test_home_caller_matches_the_repo(self):
+        text = (scan.HERE.parent.parent / scan.CALLER).read_text(encoding="utf-8")
+        self.assertEqual(scan.check_caller(scan.HOME, old(text), self.templates), [])
 
     def test_ansi_codes_are_stripped_from_gh_json(self):
         self.assertEqual(scan.ANSI.sub("", "\x1b[1;37m[\x1b[m"), "[")
@@ -62,6 +113,16 @@ class CallerTest(unittest.TestCase):
         self.assertIn("wiki-dispatch.yml@development", shipped["component"])
         self.assertNotIn("workflows/wiki-dispatch.yml", shipped["dot-github"])
         self.assertIn("add-to-project.yml@development", shipped["dot-github"])
+        for name in scan.SPLIT:
+            self.assertIn(f"workflows/reusable-{name}.yml@development", shipped[f"split/{name}"])
+        self.assertIn("  wiki-check:\n", shipped["split/wiki-check"])
+
+    def test_reusable_workflows_exist(self):
+        workflows = scan.HERE.parent.parent / scan.WORKFLOWS
+        for name in scan.SPLIT:
+            text = (workflows / f"reusable-{name}.yml").read_text(encoding="utf-8")
+            self.assertIn("workflow_call", text)
+        self.assertIn("  check:\n", (workflows / "reusable-wiki-check.yml").read_text(encoding="utf-8"))
 
 
 class RulesAndFilesTest(unittest.TestCase):

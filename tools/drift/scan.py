@@ -1,14 +1,15 @@
 """Weekly drift scan across the rmx-lt repos.
 
-On each repo's development branch: the caller workflow matches the canonical
-file (tools/drift/callers/), rulesets and has_wiki match tools/rulesets, and
+On each repo's development branch: the caller workflows match the canonical
+files (tools/drift/callers/: the old single rmx.yml, or the split layout in
+callers/split/ during the move of rmx-lt/blade-of-grass#74), rulesets and has_wiki match tools/rulesets, and
 README.md and LICENSE exist. The GitHub wiki tip must be a "Publish wiki from"
 commit, so a direct edit shows up until the next publish overwrites it.
 
 Default prints findings and exits 2 when there are any (0 when in sync,
 1 on a gh error). --update-issue opens or replaces one issue, and closes it
 when the scan is clean. Creating that issue with a PAT (not GITHUB_TOKEN)
-lets the repo's rmx.yml add it to the project.
+lets the repo's add-to-project caller add it to the project.
 
 Needs a gh login that can read rulesets (Administration) on every repo and,
 with --update-issue, open issues on rmx-lt/blade-of-grass. Spec:
@@ -39,11 +40,16 @@ ISSUE_TITLE = "Drift: rmx-lt repos are out of sync"
 PUBLISH_PREFIX = "Publish wiki from"
 MARKER = "<!-- drift-scan -->"
 FILES = ("LICENSE", "README.md")
-CALLER = ".github/workflows/rmx.yml"
-HOME_USES = (
-    "uses: ./.github/workflows/add-to-project.yml",
-    "uses: ./.github/workflows/wiki-check.yml",
-)
+WORKFLOWS = ".github/workflows/"
+CALLER = WORKFLOWS + "rmx.yml"
+# shortcut: both layouts pass while rmx-lt/blade-of-grass#74 moves the repos;
+# drop the rmx.yml branch (and callers/component.yml, dot-github.yml) after.
+SPLIT = ("add-to-project", "wiki-check", "wiki-dispatch")
+CALLER_PATHS = (CALLER, *(f"{WORKFLOWS}{name}.yml" for name in SPLIT))
+HOME_USES = {
+    "add-to-project": "uses: ./.github/workflows/reusable-add-to-project.yml",
+    "wiki-check": "uses: ./.github/workflows/reusable-wiki-check.yml",
+}
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
@@ -58,7 +64,8 @@ def normalize_text(text: str) -> str:
 
 def load_templates(directory: Path | None = None) -> dict[str, str]:
     directory = directory or (HERE / "callers")
-    return {p.stem: p.read_text(encoding="utf-8") for p in sorted(directory.glob("*.yml"))}
+    return {p.relative_to(directory).with_suffix("").as_posix(): p.read_text(encoding="utf-8")
+            for p in sorted(directory.rglob("*.yml"))}
 
 
 def fetch_text(gh, repo: str, path: str) -> str | None:
@@ -73,19 +80,40 @@ def fetch_text(gh, repo: str, path: str) -> str | None:
         raise
 
 
-def check_caller(repo: str, text: str | None, templates: dict[str, str]) -> list[str]:
-    if text is None:
-        return [f"{repo}: {CALLER} missing on development"]
-    norm = normalize_text(text)
+def check_caller(repo: str, files: dict[str, str | None],
+                 templates: dict[str, str]) -> list[str]:
+    """files maps each of CALLER_PATHS to its text, or None when missing."""
+    norm = {path: normalize_text(text) for path, text in files.items() if text is not None}
     if repo == HOME:
-        missing = [needle for needle in HOME_USES if needle not in norm]
-        if missing:
-            return [f"{repo}: {CALLER} does not call {', '.join(missing)}"]
-        return []
+        # The old shared files have the split names here, so rmx.yml picks the layout.
+        if CALLER in norm:
+            missing = [n for n in HOME_USES.values() if n not in norm[CALLER]]
+            return [f"{repo}: {CALLER} does not call {', '.join(missing)}"] if missing else []
+        return [f"{repo}: {WORKFLOWS}{name}.yml does not call {needle}"
+                for name, needle in HOME_USES.items()
+                if needle not in norm.get(f"{WORKFLOWS}{name}.yml", "")]
     kind = "dot-github" if repo == ".github" else "component"
-    if norm != normalize_text(templates[kind]):
-        return [f"{repo}: {CALLER} differs from tools/drift/callers/{kind}.yml"]
-    return []
+    split = [n for n in SPLIT if not (kind == "dot-github" and n == "wiki-dispatch")]
+    present = [p for p in CALLER_PATHS[1:] if p in norm]
+    if CALLER in norm:
+        if present:
+            return [f"{repo}: both {CALLER} and {', '.join(present)} on development; keep one layout"]
+        if norm[CALLER] != normalize_text(templates[kind]):
+            return [f"{repo}: {CALLER} differs from tools/drift/callers/{kind}.yml"]
+        return []
+    if not present:
+        return [f"{repo}: {CALLER} missing on development (or the split callers)"]
+    lines = []
+    for name in SPLIT:
+        path = f"{WORKFLOWS}{name}.yml"
+        if name not in split:
+            if path in norm:
+                lines.append(f"{repo}: {path} not expected in {kind}")
+        elif path not in norm:
+            lines.append(f"{repo}: {path} missing on development")
+        elif norm[path] != normalize_text(templates[f"split/{name}"]):
+            lines.append(f"{repo}: {path} differs from tools/drift/callers/split/{name}.yml")
+    return lines
 
 
 def check_files(repo: str, present: dict[str, bool]) -> list[str]:
@@ -124,11 +152,11 @@ def collect(gh, templates: dict[str, str], shared: list[dict], ci: dict,
         "repo", "list", ORG, "--no-archived", "--limit", "200", "--json", "name"]) or "[]"))
     findings: list[str] = []
     for repo in repos:
-        caller = fetch_text(gh, repo, CALLER)
+        callers = {path: fetch_text(gh, repo, path) for path in CALLER_PATHS}
         present = {name: fetch_text(gh, repo, name) is not None for name in FILES}
         current = apply.current_rulesets(gh, repo)
         meta = json.loads(gh(["api", f"repos/{ORG}/{repo}"]) or "null")
-        findings += check_caller(repo, caller, templates)
+        findings += check_caller(repo, callers, templates)
         findings += check_files(repo, present)
         findings += check_rules(repo, current, bool(meta.get("has_wiki")), shared, ci)
     findings += check_wiki(*wiki)
