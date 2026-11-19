@@ -24,5 +24,6 @@
 - [esp_modem + PPP](Mower-Gateway-PPP)
 - [Server contract](Mower-Gateway-Server-Contract)
 - [Plan and decisions](Mower-Gateway-Plan)
+- [Architecture](Mower-Gateway-Architecture)
 - [Tools](Mower-Gateway-Tools)
 - [Sources](Mower-Gateway-Sources)
