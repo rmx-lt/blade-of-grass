@@ -152,43 +152,12 @@ class Evaluate(unittest.TestCase):
         self.assertEqual(len(check_pr.evaluate(None, CODE, {})), 1)
 
 
-
-class ParseRefs(unittest.TestCase):
-    R = "rmx-lt/here"
-
-    def test_forms(self):
-        body = (
-            "Refs #3\nrefs: rmx-lt/x#4, https://github.com/rmx-lt/y/issues/5.\n"
-            "Refs https://github.com/rmx-lt/z/issues/6 (closed when deployed)"
-        )
-        self.assertEqual(
-            check_pr.parse_refs(body, self.R),
-            ([(self.R, 3), ("rmx-lt/x", 4), ("rmx-lt/y", 5), ("rmx-lt/z", 6)], []),
-        )
-
-    def test_mid_line_and_comment_ignored(self):
-        self.assertEqual(
-            check_pr.parse_refs("See Refs #1\n<!-- Refs #2 -->\nPart of #3", self.R),
-            ([], []),
-        )
-
-    def test_line_without_issue(self):
-        refs, problems = check_pr.parse_refs("Refs the deploy", self.R)
-        self.assertEqual(refs, [])
-        self.assertEqual(len(problems), 1)
-
-    def test_pull_url_is_not_an_issue(self):
-        refs, problems = check_pr.parse_refs(
-            "Refs https://github.com/rmx-lt/x/pull/7", self.R
-        )
-        self.assertEqual((refs, len(problems)), ([], 1))
-
-
 class CheckIssues(unittest.TestCase):
     def test_none_linked_fails(self):
         p = check_pr.check_issues({})
         self.assertEqual(len(p), 1)
         self.assertIn("reopen", p[0])
+        self.assertIn("'Refs' does not count", p[0])
 
     def test_open_passes(self):
         self.assertEqual(check_pr.check_issues({("rmx-lt/x", 1): "open"}), [])
@@ -198,9 +167,6 @@ class CheckIssues(unittest.TestCase):
         self.assertEqual(len(p), 1)
         self.assertIn("rmx-lt/y#2", p[0])
 
-    def test_not_an_issue_fails(self):
-        p = check_pr.check_issues({("rmx-lt/x", 1): None})
-        self.assertIn("not an issue", p[0])
 
 if __name__ == "__main__":
     unittest.main()
