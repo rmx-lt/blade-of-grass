@@ -6,6 +6,8 @@ The contract between the mower and the server: MQTT topics and payloads, command
 
 Changed on 2026-11-15 within version 0.1: what the mower follows is a **path**, not a job (§11). The names are `path_start`, mode `path`, `path.point`, `bad_path`, `path_paused`, `path_resumed` and the topics `autopilot/path/…`; the key `path.points` is new. A path segment has a `type` (`transit`, `edge`, `fill`) in place of `blade`; paths and `follow` carry no `speed`; the command `speed_limit` and the state field of that name are new (§7.1, §8, §11). The server and the device simulator follow all of it. The gateway is not affected.
 
+Changed on 2026-11-19 within version 0.1: both board-link heartbeats end with a `boot` byte, the low byte of the sender's boot counter. A receiver forgets the last reliable sequence number it took when that byte changes or the link goes down, and a board sends a heartbeat before its first reliable frame (§14.2, §14.4). The link version stays `1`: no board implements the link yet.
+
 **Status:** this page is the target; part of it is built (on `development`, 2026-11-15). The gateway implements its own side: topics, state, commands, chunk transfer, the metric catalogue, telemetry, data-usage counters and monitor streams; a complete firmware update is not verified yet ([rmx-mower-gateway#65](https://github.com/rmx-lt/rmx-mower-gateway/issues/65)). The server receives and stores state, catalogues, telemetry and events; it does not yet send commands or serve chunk transfer under this contract ([rmx-server-app#92](https://github.com/rmx-lt/rmx-server-app/issues/92)). The board link, the NTRIP client and the autopilot are not built. The work is tracked in [blade-of-grass#6](https://github.com/rmx-lt/blade-of-grass/issues/6).
 
 ## Contents
@@ -632,6 +634,8 @@ The gateway adds the prefix when it publishes and removes it when it delivers, s
 
 - Each direction sends one reliable frame at a time and numbers them 1, 2, … 255, 1, …
 - The receiver answers every reliable frame it gets with an ACK carrying its number. A frame with the same number as the last one it took is a repeat: acknowledged again, not passed on.
+- The receiver forgets the last number it took when the sender restarts: when the `boot` byte in the sender's heartbeat differs from the last one it saw from that board, and when the link goes down (§14.4). A restarted board numbers from 1 again, so without this its first reliable frame could look like a repeat.
+- After it starts, a board sends a HEARTBEAT before its first reliable frame, so the receiver has seen the new `boot` byte before it gets a reliable frame from the new boot.
 - A sender that gets no ACK within 200 ms sends the frame again, up to 5 times. Then it drops the frame and counts it (metric `link.dropped`).
 - Other frames (QoS 0 messages, corrections, heartbeats, ACKs) are sent in between and never acknowledged.
 
@@ -658,6 +662,7 @@ Gateway → autopilot:
 | 1 | 1 | Flags: bit 0 MQTT connected, bit 1 server online (`mower/status/server`), bit 2 corrections streaming, bit 3 clock valid, bit 4 subscriptions needed |
 | 2 | 4 | Unix time, seconds (little-endian; 0 when the clock is not valid) |
 | 6 | 2 | Milliseconds |
+| 8 | 1 | Boot: the low byte of the gateway's boot counter (§4.1) |
 
 Autopilot → gateway:
 
@@ -665,10 +670,12 @@ Autopilot → gateway:
 |---|---|---|
 | 0 | 1 | Link version, `1` |
 | 1 | 1 | Reserved, `0` |
+| 2 | 1 | Boot: the low byte of the autopilot's boot counter (§4.1) |
 
 - **Server link.** Bits 0 and 1 together are the server link of §4.2. The autopilot applies the 10 s rule to them itself.
 - **Subscriptions needed.** The gateway sets bit 4 from its start until it has received a SUBSCRIBE. The autopilot sends its list whenever it sees the bit set, so a gateway that restarted gets the list again even if the link never looked down.
 - **Clock.** The autopilot sets its clock from the heartbeat whenever bit 3 is set.
+- **Boot.** A receiver compares each heartbeat's `boot` byte with the last one it saw from that board. A different value means the sender restarted: the receiver forgets its last reliable sequence number (§14.2). The first heartbeat after the receiver itself starts only records the value. A lost heartbeat changes nothing; the byte wraps from 255 to 0 like the counter.
 - **Link version.** A board that receives a link version it does not know keeps the link down; the gateway reports `autopilot_link: "incompatible"` (§6.2).
 
 ## 15. Monitor
