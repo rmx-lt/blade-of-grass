@@ -23,7 +23,7 @@ All triggers are on the `development` branch unless stated.
 | Workflow | Runs when | Does |
 |---|---|---|
 | `add-to-project` | an issue is opened, reopened or transferred | adds it to the [project board](https://github.com/orgs/rmx-lt/projects/1) (the board's own auto-add covers one repo on our plan); fields are set by hand |
-| `wiki-check` | a PR to `development` is opened, edited or pushed | checks the PR body rules of [Wiki-Policy](Wiki-Policy) §4–5 (`Wiki:`, `Depends on:`) |
+| `wiki-check` | a PR to `development` is opened, edited or pushed | checks the PR body rules of [Wiki-Policy](Wiki-Policy) §4–5 (`Wiki:`, `Depends on:`) and that the PR links at least one issue, all of them open |
 
 ### Component repos (rmx-server-app, rmx-server-infra, rmx-mower-autopilot, rmx-mower-gateway)
 
@@ -93,6 +93,8 @@ Required checks come from branch rulesets defined in blade-of-grass `tools/rules
 | `check`, `db-roundtrip`, `container` | rmx-server-infra | `development`, `production` |
 
 `wiki-check / check` is the caller job `wiki-check` plus the reusable job `check`, so trigger files keep the job ID `wiki-check`. PRs to `production` are not wiki-checked: their changes were checked on the way into `development`.
+
+**Linked issues.** The PR's linked issues are its closing references (`Closes #<n>` or a link set in the PR sidebar) plus the issues on `Refs <issue>` lines (`#<n>`, `rmx-lt/<repo>#<n>` or the issue URL), used when the issue stays open after merge. `Part of <epic>` does not count. The check fails when there is no linked issue or one is closed: a PR linked to a closed issue moves it back to In Progress on the board, so reopen the issue first. A sidebar link, or an issue closed after the last run, is only seen on the next push or edit of the PR body.
 
 Caches (rmx-server-app only): Go modules and build (`setup-go`), Bun packages (`actions/cache`, keyed on `web/bun.lock`), Docker layers (`type=gha`, shared by CI and deploy). A PR run can read caches saved on `development`, which is why the push run keeps them warm.
 
