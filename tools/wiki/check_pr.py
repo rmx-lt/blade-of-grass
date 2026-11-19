@@ -1,9 +1,9 @@
 """wiki-check: PR body rules from Wiki-Policy sections 4-5, and the linked issue rule.
 
-Every PR links at least one issue (a closing reference or a `Refs <issue>` line) and
-every linked issue is open (rmx-lt/blade-of-grass#81).
+Every PR closes at least one issue (a closing keyword or a link set in the PR sidebar)
+and every such issue is open (rmx-lt/blade-of-grass#81, #83). `Refs` is only a mention.
 
-Pure rules (wiki_reason, parse_depends, parse_refs, evaluate, check_issues) plus a
+Pure rules (wiki_reason, parse_depends, evaluate, check_issues) plus a
 thin `gh api` wrapper (main).
 """
 from __future__ import annotations
@@ -19,12 +19,6 @@ WIKI_NONE = re.compile(r"^Wiki:[ \t]*none:[ \t]*(\S.*)$", re.IGNORECASE | re.MUL
 DEPENDS = re.compile(r"^Depends on:[ \t]*(.*)$", re.IGNORECASE | re.MULTILINE)
 DEP_ITEM = re.compile(rf"^{ORG}/([A-Za-z0-9_-][A-Za-z0-9._-]*)#(\d+)$")
 COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-REFS = re.compile(r"^Refs:?[ \t]+(.*)$", re.IGNORECASE | re.MULTILINE)
-REF_ITEM = re.compile(
-    r"https://github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)"
-    r"|(?<![\w/])([\w.-]+/[\w.-]+)#(\d+)"
-    r"|(?<![\w/#])#(\d+)"
-)
 
 
 def _clean(body: str | None) -> str:
@@ -60,38 +54,19 @@ def parse_depends(body: str) -> tuple[list[tuple[str, int]], list[str]]:
     return deps, problems
 
 
-def parse_refs(body: str, repo: str) -> tuple[list[tuple[str, int]], list[str]]:
-    """Issues named on `Refs` lines, as (owner/name, number); bare #n is in `repo`."""
-    refs: list[tuple[str, int]] = []
-    problems: list[str] = []
-    for m in REFS.finditer(_clean(body)):
-        items = REF_ITEM.findall(m.group(1))
-        if not items:
-            problems.append(f"Refs line names no issue: '{m.group(1).strip()}'")
-        for url_repo, url_n, short_repo, short_n, bare_n in items:
-            if url_repo:
-                refs.append((url_repo, int(url_n)))
-            elif short_repo:
-                refs.append((short_repo, int(short_n)))
-            else:
-                refs.append((repo, int(bare_n)))
-    return refs, problems
-
-
-def check_issues(linked: dict[tuple[str, int], str | None]) -> list[str]:
-    """linked: (owner/name, n) -> 'open' / 'closed', or None when not an issue."""
+def check_issues(linked: dict[tuple[str, int], str]) -> list[str]:
+    """linked: the closing references, (owner/name, n) -> 'open' / 'closed'."""
     if not linked:
         return [
-            "No linked issue: link the open issue this PR belongs to ('Closes #<n>', "
-            "or a 'Refs <issue>' line when the issue stays open after merge). If the "
-            "work belongs to a closed issue, reopen it first"
+            "No linked issue: close the open issue this PR completes ('Closes #<n>' "
+            "or a link in the PR sidebar; 'Refs' does not count). Deploys and live "
+            "checks go in their own issue, closed by hand. If the work belongs to a "
+            "closed issue, reopen it first"
         ]
     problems: list[str] = []
     for (repo, n), state in linked.items():
         ref = f"{repo}#{n}"
-        if state is None:
-            problems.append(f"Linked {ref}: not found or not an issue")
-        elif state != "open":
+        if state != "open":
             problems.append(
                 f"Linked issue {ref} is closed: reopen it first (a PR linked to a closed "
                 "issue moves it back to In Progress on the board)"
@@ -168,16 +143,6 @@ def _closing_issues(repo: str, pr: int) -> dict[tuple[str, int], str]:
     }
 
 
-def _issue_state(repo: str, n: int) -> str | None:
-    r = _gh(f"repos/{repo}/issues/{n}")
-    if r.returncode == 0:
-        issue = json.loads(r.stdout)
-        return None if "pull_request" in issue else issue["state"]
-    if "404" in r.stderr or "Not Found" in r.stderr:
-        return None
-    raise RuntimeError(f"cannot look up {repo}#{n}: {r.stderr.strip()}")
-
-
 def _lookup(repo: str, n: int) -> dict | None:
     r = _gh(f"repos/{ORG}/{repo}/pulls/{n}")
     if r.returncode == 0:
@@ -197,15 +162,11 @@ def main(argv: list[str] | None = None) -> int:
         files = _changed_files(args.repo, args.pr)
         parsed, _ = parse_depends(body)
         deps = {key: _lookup(*key) for key in dict.fromkeys(parsed)}
-        linked: dict[tuple[str, int], str | None] = _closing_issues(args.repo, args.pr)
-        refs, ref_problems = parse_refs(body, args.repo)
-        for key in refs:
-            if key not in linked:
-                linked[key] = _issue_state(*key)
+        linked = _closing_issues(args.repo, args.pr)
     except RuntimeError as e:
         print(f"::error::{escape_cmd(str(e))}")
         return 1
-    problems = evaluate(body, files, deps) + ref_problems + check_issues(linked)
+    problems = evaluate(body, files, deps) + check_issues(linked)
     for p in problems:
         print(f"::error::{escape_cmd(p)}")
     if problems:
