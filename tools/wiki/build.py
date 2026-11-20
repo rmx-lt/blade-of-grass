@@ -97,29 +97,18 @@ FOOTER = (
 )
 
 
-def render(pages: dict[str, Page], config: dict) -> tuple[dict[str, str], list[str]]:
-    problems: list[str] = []
-    warnings: list[str] = []
+def render(pages: dict[str, Page]) -> dict[str, str]:
     files: dict[str, str] = {}
     if "_Footer" in pages:
-        problems.append("page _Footer clashes with the generated footer")
-    for old in config["stubs"]:
-        if old in pages:
-            problems.append(f"stub {old} collides with the page {old}")
-    if problems:
-        raise BuildError(problems)
+        raise BuildError(["page _Footer clashes with the generated footer"])
     for name, page in pages.items():
         text = page.dev_text.replace("\r\n", "\n")
         prod = None if page.prod_text is None else page.prod_text.replace("\r\n", "\n")
         if not name.startswith("_") and prod != text:
             text = _banner(page.repo) + text
         files[f"{name}.md"] = text
-    for old, new in config["stubs"].items():
-        if new not in pages:
-            warnings.append(f"stub {old}: target page does not exist yet: {new}")
-        files[f"{old}.md"] = f"This page moved to [{new}]({new}).\n"
     files["_Footer.md"] = FOOTER
-    return files, warnings
+    return files
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -141,13 +130,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         config = load_config(args.config)
-        files, warnings = render(collect(args.src, config), config)
+        files = render(collect(args.src, config))
     except BuildError as e:
         for problem in e.problems:
             print(f"error: {problem}", file=sys.stderr)
         return 1
-    for w in warnings:
-        print(f"warning: {w}", file=sys.stderr)
     out.mkdir(parents=True, exist_ok=True)
     for child in out.iterdir():
         if child.is_dir() and not child.is_symlink():
