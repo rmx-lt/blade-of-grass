@@ -126,35 +126,18 @@ class RenderTest(unittest.TestCase):
         }
         pages["Fresh"].name = "Server-App-Fresh"
         pages["Server-App-Fresh"] = pages.pop("Fresh")
-        files, _ = build.render(pages, CONFIG)
+        files = build.render(pages)
         self.assertEqual(files["Same.md"], "x\n")
         self.assertEqual(files["Diff.md"], banner(HOME) + "new\n")
         self.assertEqual(files["Server-App-Fresh.md"], banner("rmx-server-app") + "new\n")
         self.assertEqual(files["_Sidebar.md"], "new\n")
         self.assertEqual(files["Eol.md"], "a\n")
 
-    def test_stubs(self):
-        pages = {"Server-Infra": P_("Server-Infra", "rmx-server-infra", "x\n", "x\n")}
-        files, warnings = build.render(pages, CONFIG)
-        self.assertEqual(files["Server.md"], "This page moved to [Server-Infra](Server-Infra).\n")
-        self.assertEqual(len(CONFIG["stubs"]), 24)
-        for old in CONFIG["stubs"]:
-            self.assertIn(old + ".md", files)
-        self.assertEqual(len(warnings), 23)
-        self.assertTrue(any("Server-Infra-Ansible" in w for w in warnings))
-        self.assertFalse(any(w.endswith(": Server-Infra") for w in warnings))
-
-    def test_stub_collision(self):
-        pages = {"Server": P_("Server", HOME, "x\n", "x\n")}
-        with self.assertRaises(build.BuildError) as cm:
-            build.render(pages, CONFIG)
-        self.assertIn("Server", "\n".join(cm.exception.problems))
-
     def test_footer(self):
-        files, _ = build.render({}, CONFIG)
+        files = build.render({})
         self.assertEqual(files["_Footer.md"], FOOTER)
         with self.assertRaises(build.BuildError):
-            build.render({"_Footer": P_("_Footer", HOME, "x\n", "x\n")}, CONFIG)
+            build.render({"_Footer": P_("_Footer", HOME, "x\n", "x\n")})
 
 
 class MainTest(unittest.TestCase):
@@ -175,7 +158,7 @@ class MainTest(unittest.TestCase):
         self.out.mkdir()
         (self.out / "stale.md").write_text("old", encoding="utf-8")
         self.assertEqual(self.run_main(), 0)
-        expected = {"Home.md", "_Footer.md"} | {s + ".md" for s in CONFIG["stubs"]}
+        expected = {"Home.md", "_Footer.md"}
         self.assertEqual({p.name for p in self.out.iterdir()}, expected)
         self.assertEqual((self.out / "Home.md").read_bytes(), b"h\n")
         # invalid tree: out untouched
